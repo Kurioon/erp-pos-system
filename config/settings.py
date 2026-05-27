@@ -61,8 +61,8 @@ INSTALLED_APPS = [
     # Наші локальні додатки
     'users',
     'products',
-    'warehouses',
     'orders',
+    'warehouses',
 ]
 
 MIDDLEWARE = [
@@ -141,3 +141,5 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+AUTH_USER_MODEL = 'users.CustomUser'

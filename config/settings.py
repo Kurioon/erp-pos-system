@@ -55,11 +55,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Наші додатки:
+    'apps.warehouses',
+    # Сторонні бібліотеки:
+    'rest_framework',
 
     # Наші локальні додатки
     'users',
     'products',
-    'warehouses',
     'orders',
 ]
 

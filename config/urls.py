@@ -20,5 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Підключаємо твої маршрути під префіксом /api/
-    path('api/', include('apps.warehouses.urls')),
+    path('api/', include('warehouses.urls')),
 ]

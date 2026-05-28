@@ -1,0 +1,222 @@
+[
+  {
+    "model": "products.product",
+    "pk": 1,
+    "fields": {
+      "sku": "PHONE-001",
+      "title": "iPhone 14 128GB",
+      "purchase_price": "25000.00",
+      "retail_price": "32000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 2,
+    "fields": {
+      "sku": "PHONE-002",
+      "title": "Samsung Galaxy S23 256GB",
+      "purchase_price": "18000.00",
+      "retail_price": "24000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 3,
+    "fields": {
+      "sku": "TABLET-001",
+      "title": "iPad Air 64GB Wi-Fi",
+      "purchase_price": "20000.00",
+      "retail_price": "27500.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 4,
+    "fields": {
+      "sku": "LAPTOP-001",
+      "title": "MacBook Air M2 256GB",
+      "purchase_price": "42000.00",
+      "retail_price": "55000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 5,
+    "fields": {
+      "sku": "LAPTOP-002",
+      "title": "Ноутбук Lenovo IdeaPad 3",
+      "purchase_price": "12000.00",
+      "retail_price": "16500.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 6,
+    "fields": {
+      "sku": "ACC-001",
+      "title": "Навушники Sony WH-1000XM5",
+      "purchase_price": "7500.00",
+      "retail_price": "10200.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 7,
+    "fields": {
+      "sku": "ACC-002",
+      "title": "Зарядний пристрій Apple 20W",
+      "purchase_price": "450.00",
+      "retail_price": "750.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 8,
+    "fields": {
+      "sku": "ACC-003",
+      "title": "Кабель USB-C 1м",
+      "purchase_price": "120.00",
+      "retail_price": "250.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 9,
+    "fields": {
+      "sku": "WATCH-001",
+      "title": "Apple Watch Series 8 GPS 41mm",
+      "purchase_price": "11000.00",
+      "retail_price": "14500.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 10,
+    "fields": {
+      "sku": "PHONE-003",
+      "title": "Xiaomi Redmi Note 12 128GB",
+      "purchase_price": "5500.00",
+      "retail_price": "7800.00",
+      "is_active": false
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 11,
+    "fields": {
+      "sku": "ACC-004",
+      "title": "Скло захисне iPhone 14",
+      "purchase_price": "80.00",
+      "retail_price": "199.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 12,
+    "fields": {
+      "sku": "ACC-005",
+      "title": "Чохол Samsung S23 силіконовий",
+      "purchase_price": "95.00",
+      "retail_price": "220.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 13,
+    "fields": {
+      "sku": "TABLET-002",
+      "title": "Samsung Galaxy Tab S8 128GB",
+      "purchase_price": "16000.00",
+      "retail_price": "21000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 14,
+    "fields": {
+      "sku": "ACC-006",
+      "title": "Power Bank Anker 20000mAh",
+      "purchase_price": "1200.00",
+      "retail_price": "1899.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 15,
+    "fields": {
+      "sku": "PHONE-004",
+      "title": "Google Pixel 7 128GB",
+      "purchase_price": "16500.00",
+      "retail_price": "22000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 16,
+    "fields": {
+      "sku": "ACC-007",
+      "title": "Бездротова зарядка Belkin 15W",
+      "purchase_price": "700.00",
+      "retail_price": "1100.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 17,
+    "fields": {
+      "sku": "LAPTOP-003",
+      "title": "ASUS VivoBook 15 i5 512GB",
+      "purchase_price": "17000.00",
+      "retail_price": "23000.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 18,
+    "fields": {
+      "sku": "ACC-008",
+      "title": "Миша бездротова Logitech MX Master 3",
+      "purchase_price": "2200.00",
+      "retail_price": "3200.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 19,
+    "fields": {
+      "sku": "ACC-009",
+      "title": "Клавіатура механічна Keychron K2",
+      "purchase_price": "2800.00",
+      "retail_price": "4100.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "products.product",
+    "pk": 20,
+    "fields": {
+      "sku": "PHONE-005",
+      "title": "OnePlus 11 256GB",
+      "purchase_price": "19000.00",
+      "retail_price": "25500.00",
+      "is_active": true
+    }
+  }
+]

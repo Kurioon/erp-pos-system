@@ -1,0 +1,38 @@
+[
+  {
+    "model": "users.user",
+    "pk": 1,
+    "fields": {
+      "email": "admin@test.com",
+      "name": "Адмін Тест",
+      "role": "admin",
+      "is_active": true,
+      "is_staff": true,
+      "date_joined": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "users.user",
+    "pk": 2,
+    "fields": {
+      "email": "seller1@test.com",
+      "name": "Продавець Один",
+      "role": "seller",
+      "is_active": true,
+      "is_staff": false,
+      "date_joined": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "users.user",
+    "pk": 3,
+    "fields": {
+      "email": "seller2@test.com",
+      "name": "Продавець Два",
+      "role": "seller",
+      "is_active": true,
+      "is_staff": false,
+      "date_joined": "2025-01-01T00:00:00Z"
+    }
+  }
+]

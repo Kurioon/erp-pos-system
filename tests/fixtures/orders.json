@@ -1,0 +1,149 @@
+[
+  {
+    "model": "orders.cashregister",
+    "pk": 1,
+    "fields": {
+      "name": "Каса №1 — Головний магазин",
+      "warehouse_id": 1,
+      "created_at": "2025-01-01T08:00:00Z"
+    }
+  },
+  {
+    "model": "orders.cashregister",
+    "pk": 2,
+    "fields": {
+      "name": "Каса №2 — Філія",
+      "warehouse_id": 2,
+      "created_at": "2025-01-01T08:00:00Z"
+    }
+  },
+
+  {
+    "model": "orders.order",
+    "pk": 1,
+    "fields": {
+      "user_id": 2,
+      "status": "paid",
+      "order_type": "retail",
+      "total_amount": "32000.00",
+      "prepay_amount": "32000.00",
+      "balance_due": "0.00",
+      "comment_ttn": "Повна оплата готівкою",
+      "created_at": "2025-05-01T10:00:00Z",
+      "updated_at": "2025-05-01T10:05:00Z"
+    }
+  },
+  {
+    "model": "orders.order",
+    "pk": 2,
+    "fields": {
+      "user_id": 2,
+      "status": "partial",
+      "order_type": "retail",
+      "total_amount": "55000.00",
+      "prepay_amount": "20000.00",
+      "balance_due": "35000.00",
+      "comment_ttn": "Передоплата за MacBook, доплата до кінця тижня",
+      "created_at": "2025-05-02T11:30:00Z",
+      "updated_at": "2025-05-02T11:35:00Z"
+    }
+  },
+  {
+    "model": "orders.order",
+    "pk": 3,
+    "fields": {
+      "user_id": 1,
+      "status": "draft",
+      "order_type": "purchase",
+      "total_amount": "126000.00",
+      "prepay_amount": "0.00",
+      "balance_due": "126000.00",
+      "comment_ttn": "ТТН 20450012345678 — закупівля від постачальника",
+      "created_at": "2025-05-03T09:00:00Z",
+      "updated_at": "2025-05-03T09:00:00Z"
+    }
+  },
+  {
+    "model": "orders.order",
+    "pk": 4,
+    "fields": {
+      "user_id": 3,
+      "status": "paid",
+      "order_type": "retail",
+      "total_amount": "10200.00",
+      "prepay_amount": "10200.00",
+      "balance_due": "0.00",
+      "comment_ttn": "",
+      "created_at": "2025-05-04T14:20:00Z",
+      "updated_at": "2025-05-04T14:22:00Z"
+    }
+  },
+  {
+    "model": "orders.order",
+    "pk": 5,
+    "fields": {
+      "user_id": 2,
+      "status": "returned",
+      "order_type": "retail",
+      "total_amount": "7800.00",
+      "prepay_amount": "7800.00",
+      "balance_due": "0.00",
+      "comment_ttn": "Повернення — клієнт передумав",
+      "created_at": "2025-05-05T16:00:00Z",
+      "updated_at": "2025-05-05T16:30:00Z"
+    }
+  },
+
+  {
+    "model": "orders.transaction",
+    "pk": 1,
+    "fields": {
+      "order_id": 1,
+      "cash_register_id": 1,
+      "user_id": 2,
+      "amount": "32000.00",
+      "currency": "UAH",
+      "transaction_type": "income",
+      "timestamp": "2025-05-01T10:05:00Z"
+    }
+  },
+  {
+    "model": "orders.transaction",
+    "pk": 2,
+    "fields": {
+      "order_id": 2,
+      "cash_register_id": 1,
+      "user_id": 2,
+      "amount": "20000.00",
+      "currency": "UAH",
+      "transaction_type": "prepay",
+      "timestamp": "2025-05-02T11:35:00Z"
+    }
+  },
+  {
+    "model": "orders.transaction",
+    "pk": 3,
+    "fields": {
+      "order_id": 4,
+      "cash_register_id": 2,
+      "user_id": 3,
+      "amount": "10200.00",
+      "currency": "UAH",
+      "transaction_type": "income",
+      "timestamp": "2025-05-04T14:22:00Z"
+    }
+  },
+  {
+    "model": "orders.transaction",
+    "pk": 4,
+    "fields": {
+      "order_id": 5,
+      "cash_register_id": 1,
+      "user_id": 2,
+      "amount": "-7800.00",
+      "currency": "UAH",
+      "transaction_type": "return",
+      "timestamp": "2025-05-05T16:30:00Z"
+    }
+  }
+]

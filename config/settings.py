@@ -37,12 +37,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-s@6r_mep0y@gdeiwiartqlg9nw@t-$5t02k0@t&h3sjyn$#zpj'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 
 # Application definition
@@ -142,3 +136,23 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 AUTH_USER_MODEL = 'users.CustomUser'
+
+# --- НАЛАШТУВАННЯ REST FRAMEWORK ТА JWT ---
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    # Робимо так, щоб без токена ніхто не міг отримати доступ до API
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # Токен доступу живе 1 годину
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Токен оновлення живе 1 день
+    'AUTH_HEADER_TYPES': ('Bearer',),               # Фронтенд передаватиме токен як "Bearer <token>"
+}

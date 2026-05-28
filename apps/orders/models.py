@@ -3,7 +3,11 @@ from django.db import models
 
 class CashRegister(models.Model):
     name = models.CharField(max_length=255)
-    warehouse_name = models.CharField(max_length=255)  # тимчасово, поки Олексій не зробить Warehouse
+    warehouse = models.ForeignKey(
+        'warehouses.Warehouse',
+        on_delete=models.CASCADE,
+        related_name='cash_registers'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -23,7 +27,7 @@ class Order(models.Model):
     ]
 
     user = models.ForeignKey(
-        'auth.User',  # тимчасово, поки Саша не зробить CustomUser
+        'users.CustomUser',
         on_delete=models.SET_NULL,
         null=True,
         related_name='orders'
@@ -70,7 +74,7 @@ class Transaction(models.Model):
         related_name='transactions'
     )
     user = models.ForeignKey(
-        'auth.User',  # тимчасово, поки Саша не зробить CustomUser
+        'users.CustomUser',
         on_delete=models.SET_NULL,
         null=True,
         related_name='transactions'

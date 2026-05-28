@@ -4,7 +4,7 @@ from .models import CashRegister, Order, Transaction
 
 @admin.register(CashRegister)
 class CashRegisterAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'warehouse_name', 'created_at')
+    list_display = ('id', 'name', 'warehouse', 'created_at')
     search_fields = ('name',)
 
 

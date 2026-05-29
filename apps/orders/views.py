@@ -1,6 +1,8 @@
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from users.permissions import IsAdminRole
 from .models import CashRegister, Order, Transaction
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer
 
@@ -19,6 +21,15 @@ class CashRegisterDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return CashRegister.objects.filter(warehouse__is_archived=False)
+
+
+class GlobalCashboxAnalyticsView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        cash_registers = CashRegister.objects.filter(warehouse__is_archived=False)
+        serializer = CashRegisterSerializer(cash_registers, many=True)
+        return Response(serializer.data)
 
 
 class OrderListCreateView(generics.ListCreateAPIView):

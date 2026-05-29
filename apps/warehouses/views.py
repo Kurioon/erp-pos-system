@@ -52,11 +52,27 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         """
         Override create to return strict API contract: {"job_id": id, "status": status}.
         Returns HTTP 201 on success.
+        If storage_cell is occupied (conflict), returns HTTP 409 Conflict.
         """
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
         
+        if not serializer.is_valid():
+            # BUG-002: Check if the error is a storage_cell conflict
+            if 'storage_cell' in serializer.errors:
+                return Response(
+                    {
+                        "error": "Conflict",
+                        "detail": serializer.errors['storage_cell']
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+            # For other validation errors, return 400 Bad Request
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        self.perform_create(serializer)
         instance = serializer.instance
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
@@ -68,14 +84,68 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED
         )
 
+    def update(self, request, *args, **kwargs):
+        """
+        Override update to handle storage_cell conflicts with HTTP 409 Conflict.
+        Returns HTTP 200 on success.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if not serializer.is_valid():
+            # BUG-002: Check if the error is a storage_cell conflict
+            if 'storage_cell' in serializer.errors:
+                return Response(
+                    {
+                        "error": "Conflict",
+                        "detail": serializer.errors['storage_cell']
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+            # For other validation errors, return 400 Bad Request
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        self.perform_update(serializer)
+        
+        # For full update (PUT), return standard API contract
+        return Response(
+            {
+                "job_id": instance.id,
+                "status": instance.status,
+                "updated_at": instance.updated_at
+            },
+            status=status.HTTP_200_OK
+        )
+
     def partial_update(self, request, *args, **kwargs):
         """
         Override partial_update to return strict API contract: {"job_id": id, "status": status, "updated_at": updated_at}.
         Returns HTTP 200 on success.
+        If storage_cell is occupied (conflict), returns HTTP 409 Conflict.
         """
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
+        
+        if not serializer.is_valid():
+            # BUG-002: Check if the error is a storage_cell conflict
+            if 'storage_cell' in serializer.errors:
+                return Response(
+                    {
+                        "error": "Conflict",
+                        "detail": serializer.errors['storage_cell']
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+            # For other validation errors, return 400 Bad Request
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         self.perform_update(serializer)
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200

@@ -1,4 +1,5 @@
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import CashRegister, Order, Transaction
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer
@@ -6,6 +7,7 @@ from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSer
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
     serializer_class = CashRegisterSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return CashRegister.objects.filter(warehouse__is_archived=False)
@@ -13,6 +15,7 @@ class CashRegisterListCreateView(generics.ListCreateAPIView):
 
 class CashRegisterDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CashRegisterSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return CashRegister.objects.filter(warehouse__is_archived=False)
@@ -20,6 +23,7 @@ class CashRegisterDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class OrderListCreateView(generics.ListCreateAPIView):
     serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = Order.objects.filter(is_archived=False)
@@ -42,6 +46,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
 
     def update(self, request, *args, **kwargs):
         order = self.get_object()
@@ -63,6 +68,7 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class TransactionListCreateView(generics.ListCreateAPIView):
     serializer_class = TransactionSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = Transaction.objects.all()
@@ -85,3 +91,4 @@ class TransactionListCreateView(generics.ListCreateAPIView):
 class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
+    permission_classes = [IsAuthenticated]

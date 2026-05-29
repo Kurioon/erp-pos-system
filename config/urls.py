@@ -19,6 +19,8 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('warehouses.urls')),
+    path('api/users/', include('users.urls', namespace='users')),
+    # Підключаємо твої маршрути під префіксом /api/
     path('api/', include('orders.urls')),
+    path('api/', include('warehouses.urls')),
 ]

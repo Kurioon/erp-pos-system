@@ -20,7 +20,9 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/users/', include('users.urls', namespace='users')),
+    
+    path('api/auth/', include('users.urls', namespace='auth')),
+
     # Підключаємо твої маршрути під префіксом /api/
     path('api/', include('orders.urls')),
     path('api/', include('warehouses.urls')),

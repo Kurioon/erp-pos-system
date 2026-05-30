@@ -48,9 +48,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'cloudinary_storage',
     'django.contrib.staticfiles',
-    'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
+    'cloudinary',
     'corsheaders',
     'drf_spectacular',
 
@@ -185,10 +185,10 @@ SPECTACULAR_SETTINGS = {
 
 # Налаштування Cloudinary
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': env('CLOUDINARY_API_KEY'),
-    'API_SECRET': env('CLOUDINARY_API_SECRET'),
+    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME', default='dummy_cloud'),
+    'API_KEY': env('CLOUDINARY_API_KEY', default='dummy_key'),
+    'API_SECRET': env('CLOUDINARY_API_SECRET', default='dummy_secret'),
+    'SECURE': True, 
 }
 
-# Вказуємо Django використовувати Cloudinary для медіа-файлів
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

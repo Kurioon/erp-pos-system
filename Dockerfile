@@ -17,7 +17,7 @@ COPY . /app/
 
 # Збираємо статичні файли (для адмінки та WhiteNoise)
 # (Тут використовується фіктивний SECRET_KEY просто для того, щоб команда відпрацювала під час збірки)
-# RUN SECRET_KEY="dummy_key_for_build" python manage.py collectstatic --noinput
+RUN SECRET_KEY="dummy_key_for_build" python manage.py collectstatic --noinput
 
 # Вказуємо порт, який слухатиме контейнер (Render використовує 10000)
 EXPOSE 10000

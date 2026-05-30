@@ -33,8 +33,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -50,11 +49,15 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
     'cloudinary',
     'cloudinary_storage',
+    'corsheaders',
+    'drf_spectacular',
 
     # Наші локальні додатки
     'users',
@@ -142,6 +145,17 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
+# --- НАЛАШТУВАННЯ CORS ТА CSRF ДЛЯ ФРОНТЕНДУ ---
+# Дозволяємо запити з локального фронтенду Vue (стандартний порт 5173)
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+])
+
 # --- НАЛАШТУВАННЯ REST FRAMEWORK ТА JWT ---
 
 REST_FRAMEWORK = {
@@ -152,6 +166,10 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 from datetime import timedelta
@@ -162,11 +180,19 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),               # Фронтенд передаватиме токен як "Bearer <token>"
 }
 
+# Налаштування для Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'ERP/POS System API',
+    'DESCRIPTION': 'API documentation for our ERP system',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
 
+# Налаштування Cloudinary
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
-    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
+    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': env('CLOUDINARY_API_KEY'),
+    'API_SECRET': env('CLOUDINARY_API_SECRET'),
 }
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

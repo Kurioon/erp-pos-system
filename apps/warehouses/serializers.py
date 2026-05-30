@@ -11,7 +11,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
 
 class ServiceJobSerializer(serializers.ModelSerializer):
-    """Serializer for ServiceJob model including comment field."""
+    """Serializer for ServiceJob model including comment and photo fields."""
     class Meta:
         model = ServiceJob
         fields = [
@@ -21,6 +21,7 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'device_name',
             'description',
             'comment',
+            'photo',
             'status',
             'storage_cell',
             'created_at',

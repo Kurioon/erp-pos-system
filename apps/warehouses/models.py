@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 from django.core.validators import RegexValidator, MinLengthValidator
+from cloudinary.models import CloudinaryField
 
 class Warehouse(models.Model):
     name = models.CharField(max_length=255)
@@ -33,6 +34,9 @@ class ServiceJob(models.Model):
     
     # ДОДАНО згідно з US-06: Текстовий коментар або номер ТТН (необов'язкове поле)
     comment = models.TextField(blank=True, null=True)
+    
+    # ДОДАНО: Фото ремонту через Cloudinary
+    photo = CloudinaryField('image', blank=True, null=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     storage_cell = models.CharField(max_length=10)

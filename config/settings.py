@@ -51,11 +51,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'cloudinary_storage',
     'django.contrib.staticfiles',
-    'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
     'cloudinary',
-    'cloudinary_storage',
     'corsheaders',
     'drf_spectacular',
 

@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.openapi import OpenApiTypes
 from .models import Warehouse, ServiceJob, WarehouseStock
 
 
@@ -12,6 +14,8 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
 class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
+    photo = serializers.ImageField(required=False, allow_null=True)
+    @extend_schema_field(OpenApiTypes.BINARY)
     class Meta:
         model = ServiceJob
         fields = [

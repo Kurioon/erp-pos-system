@@ -7,9 +7,10 @@ from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema
+from users.permissions import IsAdminRole
 
 from .models import Warehouse, ServiceJob, WarehouseStock
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer
@@ -54,7 +55,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ServiceJobSerializer
     parser_classes = (MultiPartParser, FormParser, JSONParser)
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
@@ -227,7 +228,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
     # --- НОВІ ЕНДПОІНТИ ---
 
-    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[AllowAny])
+    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[IsAuthenticated])
     def export_csv(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="service_jobs.csv"'
@@ -250,7 +251,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
         return response
 
-    @action(detail=True, methods=['get'], url_path='export/pdf', permission_classes=[AllowAny])
+    @action(detail=True, methods=['get'], url_path='export/pdf', permission_classes=[IsAdminRole])
     def export_pdf(self, request, pk=None):
         job = self.get_object()
         buffer = io.BytesIO()
@@ -307,7 +308,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
 
     # --- НОВІ ЕНДПОІНТИ ---
 
-    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[AllowAny])
+    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[IsAuthenticated])
     def export_csv(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="warehouse_stock.csv"'
@@ -330,7 +331,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         return response
 
     @action(detail=False, methods=['post'], url_path='import/csv')
-    @permission_classes([AllowAny])
+    @permission_classes([IsAdminRole])
     def import_csv(self, request):
         from apps.products.models import Nomenclature
 

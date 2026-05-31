@@ -46,9 +46,11 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'cloudinary',
     'corsheaders',
     'drf_spectacular',
 
@@ -180,3 +182,13 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
+
+# Налаштування Cloudinary
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME', default='dummy_cloud'),
+    'API_KEY': env('CLOUDINARY_API_KEY', default='dummy_key'),
+    'API_SECRET': env('CLOUDINARY_API_SECRET', default='dummy_secret'),
+    'SECURE': True, 
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

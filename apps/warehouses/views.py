@@ -336,7 +336,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
     # ОНОВЛЕНО: Прибрано зайвий декоратор @permission_classes. Права доступу передані в @action.
     @action(detail=False, methods=['post'], url_path='import/csv', permission_classes=[IsAdminUser])
     def import_csv(self, request):
-        from apps.products.models import Nomenclature
+        from products.models import Nomenclature
 
         file = request.FILES.get('file')
         

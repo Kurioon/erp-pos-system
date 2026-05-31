@@ -6,13 +6,12 @@ def add_stock(warehouse, nomenclature, quantity: int):
     if quantity <= 0:
         raise ValueError("Кількість для додавання має бути більшою за нуль.")
     
-    # Фільтр is_archived=False гарантує, що ми не працюємо з видаленими записами
-    stock, created = WarehouseStock.objects.filter(is_archived=False).get_or_create(
-        warehouse=warehouse, 
+    stock, _ = WarehouseStock.objects.get_or_create(
+        warehouse=warehouse,
         nomenclature=nomenclature,
-        defaults={'quantity': 0}
+        defaults={'quantity': 0, 'is_archived': False}
     )
-    
+    stock.is_archived = False
     stock.quantity += quantity
     stock.save()
     

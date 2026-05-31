@@ -21,4 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # Підключаємо твої маршрути під префіксом /api/
     path('api/', include('warehouses.urls')),
+    path('api/', include('products.urls')),
+    path('api/', include('activity_log.urls')),
 ]

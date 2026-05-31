@@ -126,9 +126,9 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
 
 def _deduct_order_items(order: Order):
     for item in order.items.all():
-        remove_stock(product=item.product, warehouse=order.cash_register.warehouse, qty=item.quantity)
+        remove_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)
 
 
 def _return_order_items(order: Order):
     for item in order.items.all():
-        add_stock(product=item.product, warehouse=order.cash_register.warehouse, qty=item.quantity)
+        add_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)

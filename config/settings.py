@@ -36,7 +36,7 @@ DEBUG = env('DEBUG')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Application definition
 
@@ -171,7 +171,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # Токен доступу живе 1 годину
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),     # Токен доступу живе 2 години
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Токен оновлення живе 1 день
     'AUTH_HEADER_TYPES': ('Bearer',),               # Фронтенд передаватиме токен як "Bearer <token>"
 }
@@ -206,3 +206,12 @@ STORAGES = {
 # Заглушка (Workaround) для застарілої бібліотеки django-cloudinary-storage, 
 # щоб вона не викидала AttributeError під час збірки Docker:
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Безпека для продакшену (Render вже надає HTTPS)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

@@ -6,8 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.permissions import IsAdminRole
-from .models import CashRegister, Order, Transaction
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer
+from .models import CashRegister, Order, Transaction, OrderItem
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
 
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
@@ -88,6 +88,29 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
         order.is_archived = True
         order.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class OrderItemListCreateView(generics.ListCreateAPIView):
+    serializer_class = OrderItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        order_id = self.kwargs.get('order_id')
+        return OrderItem.objects.filter(order_id=order_id)
+
+    def perform_create(self, serializer):
+        order_id = self.kwargs.get('order_id')
+        order = Order.objects.get(pk=order_id)
+        serializer.save(order=order)
+
+
+class OrderItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = OrderItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        order_id = self.kwargs.get('order_id')
+        return OrderItem.objects.filter(order_id=order_id)
 
 
 class TransactionListCreateView(generics.ListCreateAPIView):

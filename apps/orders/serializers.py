@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import CashRegister, Order, Transaction
+from .models import CashRegister, Order, Transaction, OrderItem
 
 
 class CashRegisterSerializer(serializers.ModelSerializer):
@@ -9,7 +9,15 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class OrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderItem
+        fields = '__all__'
+
+
 class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+
     class Meta:
         model = Order
         fields = '__all__'
@@ -34,10 +42,8 @@ class OrderSerializer(serializers.ModelSerializer):
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
             )
 
-        # Рахуємо самі — ігноруємо те що передав фронтенд
         data['balance_due'] = total - prepay
 
-        # Автоматичний статус
         if data['balance_due'] == 0 and prepay > 0:
             data['status'] = 'paid'
         elif prepay > 0:
@@ -60,7 +66,6 @@ class TransactionSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        # BUG-001: беремо юзера з request
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             validated_data['user'] = request.user

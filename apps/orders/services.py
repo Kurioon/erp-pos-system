@@ -43,10 +43,10 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
         order.status = 'paid'
-        _deduct_order_items(order)
     else:
         order.status = 'partial'
 
+    _deduct_order_items(order)
     order.save()
     return t
 
@@ -70,7 +70,6 @@ def process_payment(order: Order, amount: Decimal, currency: str, cash_register,
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
         order.status = 'paid'
-        _deduct_order_items(order)
 
     order.save()
     return t

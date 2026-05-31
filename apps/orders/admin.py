@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CashRegister, Order, Transaction
+from .models import CashRegister, Order, Transaction, OrderItem
 
 
 @admin.register(CashRegister)
@@ -20,3 +20,9 @@ class TransactionAdmin(admin.ModelAdmin):
     list_display = ('id', 'order', 'cash_register', 'transaction_type', 'amount', 'currency', 'timestamp')
     list_filter = ('transaction_type', 'currency')
     search_fields = ('order__id',)
+
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'order', 'product', 'quantity', 'price')
+    search_fields = ('order__id', 'product__name')

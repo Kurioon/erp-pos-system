@@ -28,23 +28,9 @@ class WarehouseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Override queryset to return only non-archived warehouse stocks (is_archived=False).
-        Оптимізація N+1 для експорту та списків.
-        """
-        return WarehouseStock.objects.filter(
-            is_archived=False
-        ).select_related(
-            'warehouse', 
-            'nomenclature'
-        )
+        return Warehouse.objects.filter(is_archived=False)
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Override destroy to implement soft delete.
-        Instead of deleting, set is_archived=True and save.
-        Returns HTTP 204 NO CONTENT on success.
-        """
         instance = self.get_object()
         instance.is_archived = True
         instance.save()
@@ -350,7 +336,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
     # ОНОВЛЕНО: Прибрано зайвий декоратор @permission_classes. Права доступу передані в @action.
     @action(detail=False, methods=['post'], url_path='import/csv', permission_classes=[IsAdminUser])
     def import_csv(self, request):
-        from apps.products.models import Nomenclature
+        from products.models import Nomenclature
 
         file = request.FILES.get('file')
         

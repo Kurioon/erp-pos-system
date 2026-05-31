@@ -100,7 +100,14 @@ class OrderItemListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         order_id = self.kwargs.get('order_id')
-        order = Order.objects.get(pk=order_id)
+        try:
+            order = Order.objects.get(pk=order_id)
+        except Order.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Замовлення не знайдено.')
+        if order.status != 'draft':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Додавати позиції можна лише до замовлення зі статусом draft.')
         serializer.save(order=order)
 
 
@@ -135,7 +142,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         return queryset
 
 
-class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
+class TransactionDetailView(generics.RetrieveAPIView):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
@@ -145,10 +152,11 @@ class OrderExportCSVView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="orders.csv"'
+        response.write('﻿'.encode('utf-8'))
 
-        writer = csv.writer(response)
+        writer = csv.writer(response, delimiter=';')
         writer.writerow([
             'ID', 'Статус', 'Тип', 'Сума', 'Передоплата',
             'Борг', 'Коментар/ТТН', 'Дата створення'
@@ -182,10 +190,11 @@ class TransactionExportCSVView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="transactions.csv"'
+        response.write('﻿'.encode('utf-8'))
 
-        writer = csv.writer(response)
+        writer = csv.writer(response, delimiter=';')
         writer.writerow([
             'ID', 'Замовлення', 'Каса', 'Тип', 'Сума', 'Валюта', 'Дата'
         ])

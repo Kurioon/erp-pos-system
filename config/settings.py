@@ -46,8 +46,8 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary_storage',
     'rest_framework',
     'rest_framework_simplejwt',
     'cloudinary',
@@ -191,4 +191,17 @@ CLOUDINARY_STORAGE = {
     'SECURE': True, 
 }
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+STORAGES = {
+    # Сховище для MEDIA (Фото товарів летять у Cloudinary)
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    # Сховище для STATIC (CSS/JS обробляються локально через WhiteNoise)
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Заглушка (Workaround) для застарілої бібліотеки django-cloudinary-storage, 
+# щоб вона не викидала AttributeError під час збірки Docker:
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

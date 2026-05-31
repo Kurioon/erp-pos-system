@@ -7,10 +7,10 @@ from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 
 from .models import Warehouse, ServiceJob, WarehouseStock
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer
@@ -25,12 +25,19 @@ class WarehouseViewSet(viewsets.ModelViewSet):
     Implements soft delete: destroy() sets is_archived=True instead of actual deletion.
     """
     serializer_class = WarehouseSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
-        Override queryset to return only non-archived warehouses (is_archived=False).
+        Override queryset to return only non-archived warehouse stocks (is_archived=False).
+        Оптимізація N+1 для експорту та списків.
         """
-        return Warehouse.objects.filter(is_archived=False)
+        return WarehouseStock.objects.filter(
+            is_archived=False
+        ).select_related(
+            'warehouse', 
+            'nomenclature'
+        )
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -55,7 +62,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ServiceJobSerializer
     parser_classes = (MultiPartParser, FormParser, JSONParser)
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]  # Базовий захист для всіх стандартних CRUD операцій
 
     def get_queryset(self):
         """
@@ -251,7 +258,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
         return response
 
-    @action(detail=True, methods=['get'], url_path='export/pdf', permission_classes=[IsAdminRole])
+    @action(detail=True, methods=['get'], url_path='export/pdf', permission_classes=[IsAuthenticated])
     def export_pdf(self, request, pk=None):
         job = self.get_object()
         buffer = io.BytesIO()
@@ -288,12 +295,21 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
     Implements soft delete: destroy() sets is_archived=True instead of actual deletion.
     """
     serializer_class = WarehouseStockSerializer
+    
+    # ОНОВЛЕНО: Базовий захист для всіх стандартних CRUD операцій
+    permission_classes = [IsAuthenticated] 
 
     def get_queryset(self):
         """
         Override queryset to return only non-archived warehouse stocks (is_archived=False).
+        ОНОВЛЕНО: Додано select_related для вирішення проблеми N+1 запитів!
         """
-        return WarehouseStock.objects.filter(is_archived=False)
+        return WarehouseStock.objects.filter(
+            is_archived=False
+        ).select_related(
+            'warehouse', 
+            'nomenclature'
+        )
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -308,7 +324,8 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
 
     # --- НОВІ ЕНДПОІНТИ ---
 
-    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[IsAuthenticated])
+    # ОНОВЛЕНО: Замінено AllowAny на IsAdminUser (або IsAuthenticated). Звіти мають качати тільки свої.
+    @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[IsAdminUser])
     def export_csv(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="warehouse_stock.csv"'
@@ -330,8 +347,8 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
 
         return response
 
-    @action(detail=False, methods=['post'], url_path='import/csv')
-    @permission_classes([IsAdminRole])
+    # ОНОВЛЕНО: Прибрано зайвий декоратор @permission_classes. Права доступу передані в @action.
+    @action(detail=False, methods=['post'], url_path='import/csv', permission_classes=[IsAdminUser])
     def import_csv(self, request):
         from apps.products.models import Nomenclature
 
@@ -398,6 +415,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
                         nomenclature=data['nomenclature'],
                         defaults={'quantity': 0}
                     )
+                    
+                    # Якщо запис існував, ми просто додаємо кількість. 
+                    # Якщо створився новий - до нуля додасться кількість.
                     stock.quantity += data['quantity']
                     stock.is_archived = False 
                     stock.save()

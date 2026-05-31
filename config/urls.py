@@ -26,6 +26,9 @@ urlpatterns = [
     # Підключаємо твої маршрути під префіксом /api/
     path('api/', include('orders.urls')),
     path('api/', include('warehouses.urls')),
+    path('api/', include('products.urls')),
+    path('api/', include('activity_log.urls')),
+]
 
     # --- ЕНДПОІНТИ ДЛЯ ДОКУМЕНТАЦІЇ ---
     

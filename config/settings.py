@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'products',
     'orders',
     'warehouses',
+    'activity_log',
 ]
 
 MIDDLEWARE = [

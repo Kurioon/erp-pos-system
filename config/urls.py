@@ -16,11 +16,25 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    path('api/auth/', include('users.urls', namespace='auth')),
+
     # Підключаємо твої маршрути під префіксом /api/
+    path('api/', include('orders.urls')),
     path('api/', include('warehouses.urls')),
     path('api/', include('products.urls')),
     path('api/', include('activity_log.urls')),
+]
+
+    # --- ЕНДПОІНТИ ДЛЯ ДОКУМЕНТАЦІЇ ---
+    
+    # 1. Цей шлях генерує саму схему у форматі YAML/JSON (його читає комп'ютер)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    
+    # 2. Цей шлях малює красивий інтерфейс Swagger (його читають люди)
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

@@ -430,3 +430,19 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
             "status": "success", 
             "message": f"Успішно імпортовано або оновлено {len(valid_rows)} записів."
         }, status=status.HTTP_201_CREATED)
+    
+    
+    @action(detail=False, methods=['get'], url_path='low-stock', permission_classes=[IsAdminUser])
+    def low_stock(self, request):
+        """
+        Повертає список товарів, залишок яких на складі дорівнює або менше 2.
+        Використовує базовий get_queryset, тому оптимізація (select_related) 
+        та фільтрація архівних записів застосовуються автоматично.
+        """
+        # quantity__lte=2 означає "Less Than or Equal to 2" (менше або дорівнює 2)
+        low_stocks = self.get_queryset().filter(quantity__lte=2)
+        
+        # Передаємо відфільтровані дані у стандартний серіалізатор
+        serializer = self.get_serializer(low_stocks, many=True)
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -55,6 +55,39 @@ class ServiceJobSerializer(serializers.ModelSerializer):
                 f"Комірка {value} вже зайнята ремонтом #{existing_job.id}."
             )
         return value
+    
+    def validate_status(self, new_status):
+        """
+        Валідація машини станів (FSM) для ремонтів.
+        Блокує нелогічні переходи (наприклад, з 'done' у 'pending').
+        """
+        # Якщо це створення нового ремонту, пропускаємо перевірку
+        if not self.instance:
+            return new_status
+
+        current_status = self.instance.status
+        
+        # Словник дозволених переходів статусів (тільки існуючі в моделі)
+        ALLOWED_TRANSITIONS = {
+            'pending': ['waiting_parts', 'done', 'returned'],
+            'waiting_parts': ['pending', 'done', 'returned'],
+            'done': ['returned'],
+            'returned': [], # Кінцевий статус, далі рух заборонено
+        }
+
+        # Якщо статус не змінився, все ок
+        if new_status == current_status:
+            return new_status
+
+        allowed_next_states = ALLOWED_TRANSITIONS.get(current_status, [])
+
+        # Якщо намагаємося перейти у статус, якого немає в дозволених
+        if new_status not in allowed_next_states:
+            raise serializers.ValidationError(
+                f"Неможливо перевести ремонт зі статусу '{current_status}' у '{new_status}'."
+            )
+
+        return new_status
 
 
 class WarehouseStockSerializer(serializers.ModelSerializer):

@@ -98,7 +98,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-'default': env.db('DATABASE_URL', default='sqlite:///db.sqlite3')
+    'default': {
+        **env.db('DATABASE_URL', default='sqlite:///db.sqlite3'),
+        'OPTIONS': {
+            'options': '-c client_encoding=UTF8',
+        },
+    }
 }
 
 
@@ -142,7 +147,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 AUTH_USER_MODEL = 'users.CustomUser'
 
 # --- НАЛАШТУВАННЯ CORS ТА CSRF ДЛЯ ФРОНТЕНДУ ---
-# Дозволяємо запити з локального фронтенду Vue (стандартний порт 5173)
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -151,6 +155,12 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ])
+
+# Дозволяємо кастомний заголовок X-Timezone від фронтенду
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'X-Timezone',
+]
 
 # --- НАЛАШТУВАННЯ REST FRAMEWORK ТА JWT ---
 

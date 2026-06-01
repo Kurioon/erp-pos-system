@@ -39,7 +39,7 @@ class ServiceJob(models.Model):
     photo = CloudinaryField('image', blank=True, null=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    storage_cell = models.CharField(max_length=10)
+    storage_cell = models.CharField(max_length=10, null=True, blank=True)
 
     is_archived = models.BooleanField(default=False)
     
@@ -56,7 +56,8 @@ class ServiceJob(models.Model):
         ]
 
     def __str__(self):
-        return f"Ремонт #{self.id} - {self.device_name} (Комірка: {self.storage_cell})"
+        cell = self.storage_cell if self.storage_cell else "Не призначена"
+        return f"Ремонт #{self.id} - {self.device_name} (Комірка: {cell})"
 
 class WarehouseStock(models.Model):
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='stocks')

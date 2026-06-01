@@ -15,7 +15,9 @@ class WarehouseSerializer(serializers.ModelSerializer):
 class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
     photo = serializers.ImageField(required=False, allow_null=True)
-    @extend_schema_field(OpenApiTypes.BINARY)
+    
+    # ВИДАЛЕНО @extend_schema_field, щоб не було SyntaxError
+
     class Meta:
         model = ServiceJob
         fields = [
@@ -38,23 +40,74 @@ class ServiceJobSerializer(serializers.ModelSerializer):
         Реалізація Acceptance Criteria US-02: Комірка блокується.
         Перевіряємо, чи немає вже активного ремонту в цій комірці.
         """
-        # ВИПРАВЛЕНО: Використовуємо нові статуси згідно з ТЗ
+        # Якщо комірка не передана, пропускаємо валідацію
+        if not value:
+            return value
+
         active_statuses = ['pending', 'waiting_parts']
-        
         job_id = self.instance.id if self.instance else None
         
-        # ВИПРАВЛЕНО: Додано is_archived=False, щоб архівні ремонти не блокували комірку
-        existing_job = ServiceJob.objects.filter(
+        # ВИПРАВЛЕНО: Використовуємо .exists() для оптимізації швидкодії
+        is_occupied = ServiceJob.objects.filter(
             storage_cell=value, 
             status__in=active_statuses,
             is_archived=False
-        ).exclude(id=job_id).first()
+        ).exclude(id=job_id).exists()
 
-        if existing_job:
+        if is_occupied:
             raise serializers.ValidationError(
-                f"Комірка {value} вже зайнята ремонтом #{existing_job.id}."
+                f"Комірка {value} вже зайнята іншим активним ремонтом."
             )
         return value
+    
+    def validate_status(self, new_status):
+        """
+        Валідація машини станів (FSM) для ремонтів.
+        Блокує нелогічні переходи (наприклад, з 'done' у 'pending').
+        """
+        if not self.instance:
+            return new_status
+
+        current_status = self.instance.status
+        
+        ALLOWED_TRANSITIONS = {
+            'pending': ['waiting_parts', 'done', 'returned'],
+            'waiting_parts': ['pending', 'done', 'returned'],
+            'done': ['returned'],
+            'returned': [], # Кінцевий статус
+        }
+
+        if new_status == current_status:
+            return new_status
+
+        allowed_next_states = ALLOWED_TRANSITIONS.get(current_status, [])
+
+        if new_status not in allowed_next_states:
+            raise serializers.ValidationError(
+                f"Неможливо перевести ремонт зі статусу '{current_status}' у '{new_status}'."
+            )
+
+        return new_status
+
+    def validate(self, data):
+        """
+        Глобальна валідація об'єкта. 
+        Перевіряє, щоб при статусі 'returned' комірка не заповнювалась, і очищає її.
+        """
+        if not self.instance:
+            return data
+
+        new_status = data.get('status', self.instance.status)
+        
+        if new_status == 'returned':
+            # Замість "мовчазного" очищення, сваримося, якщо юзер передав комірку
+            if data.get('storage_cell'):
+                raise serializers.ValidationError(
+                    {"storage_cell": "При видачі пристрою (статус 'returned') комірка має бути порожньою."}
+                )
+            data['storage_cell'] = None 
+            
+        return data
 
 
 class WarehouseStockSerializer(serializers.ModelSerializer):

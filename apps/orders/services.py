@@ -23,10 +23,16 @@ def _validate_transition(order: Order, new_status: str):
 
 @transaction.atomic
 def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
-    _validate_transition(order, 'partial')
+    if order.status not in ('draft', 'partial'):
+        raise ValueError(f"Неможливо прийняти оплату для замовлення зі статусом '{order.status}'.")
 
-    if amount > order.total_amount:
-        raise ValueError('Передоплата не може перевищувати загальну суму замовлення.')
+    if amount <= 0:
+        raise ValueError('Сума оплати має бути більшою за нуль.')
+
+    if amount > order.balance_due:
+        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due}.')
+
+    is_first_payment = order.status == 'draft'
 
     t = Transaction.objects.create(
         order=order,
@@ -37,8 +43,8 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         transaction_type='prepay',
     )
 
-    order.prepay_amount = amount
-    order.balance_due = order.total_amount - amount
+    order.prepay_amount += amount
+    order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
@@ -46,7 +52,10 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     else:
         order.status = 'partial'
 
-    _deduct_order_items(order)
+    # Списуємо товар тільки при першій оплаті (draft → partial/paid)
+    if is_first_payment:
+        _deduct_order_items(order)
+
     order.save()
     return t
 

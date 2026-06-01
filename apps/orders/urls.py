@@ -19,8 +19,8 @@ from .views import (
 
 urlpatterns = [
     path('cash-registers/', CashRegisterListCreateView.as_view(), name='cashregister-list'),
-    path('cash-registers/<int:pk>/', CashRegisterDetailView.as_view(), name='cashregister-detail'),
     path('cash-registers/analytics/', GlobalCashboxAnalyticsView.as_view(), name='cashregister-analytics'),
+    path('cash-registers/<int:pk>/', CashRegisterDetailView.as_view(), name='cashregister-detail'),
 
     path('orders/', OrderListCreateView.as_view(), name='order-list'),
     path('orders/export/csv/', OrderExportCSVView.as_view(), name='order-export-csv'),

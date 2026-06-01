@@ -6,6 +6,8 @@ from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from .models import CashRegister, Order, Transaction, OrderItem
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
@@ -263,13 +265,21 @@ class OrderExportPDFView(APIView):
 # --- НОВІ ЕНДПОІНТИ (Міша B4) ---
 
 class OrderRefundView(APIView):
-    """
-    POST /api/orders/{id}/refund/
-    Повернення оплаченого замовлення. Статус: paid -> returned.
-    Body: { "cash_register": <id>, "currency": "UAH" }
-    """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'cash_register': {'type': 'integer', 'example': 1},
+                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                },
+                'required': ['cash_register'],
+            }
+        },
+        description='Повернення оплаченого замовлення. Статус: paid → returned.',
+    )
     def post(self, request, pk):
         try:
             order = Order.objects.get(pk=pk)
@@ -292,6 +302,7 @@ class OrderRefundView(APIView):
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        order.refresh_from_db()
         return Response({
             'order_id': order.id,
             'status': order.status,
@@ -300,13 +311,22 @@ class OrderRefundView(APIView):
 
 
 class OrderPrepayView(APIView):
-    """
-    POST /api/orders/{id}/prepay/
-    Передоплата замовлення. Статус: draft -> partial або paid.
-    Body: { "amount": "500.00", "cash_register": <id>, "currency": "UAH" }
-    """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'amount': {'type': 'string', 'example': '500.00'},
+                    'cash_register': {'type': 'integer', 'example': 1},
+                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                },
+                'required': ['amount', 'cash_register'],
+            }
+        },
+        description='Передоплата замовлення. Статус: draft → partial або paid залежно від суми.',
+    )
     def post(self, request, pk):
         try:
             order = Order.objects.get(pk=pk)

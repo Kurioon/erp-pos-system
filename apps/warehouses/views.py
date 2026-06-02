@@ -13,7 +13,6 @@ from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 
-from activity_log.models import ActivityLog
 from .models import Warehouse, ServiceJob, WarehouseStock
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer
 

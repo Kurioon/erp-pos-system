@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from users.models import CustomUser
 from products.models import Nomenclature
 from warehouses.models import Warehouse, WarehouseStock
-from orders.models import CashRegister
+from orders.models import CashRegister, ExchangeRate
 
 
 class Command(BaseCommand):
@@ -59,6 +59,11 @@ class Command(BaseCommand):
             defaults={'warehouse': wh2}
         )
         self.stdout.write('✓ Каси створені')
+
+        # Курси валют
+        ExchangeRate.objects.get_or_create(currency='USD', defaults={'rate_to_uah': Decimal('40.5000')})
+        ExchangeRate.objects.get_or_create(currency='EUR', defaults={'rate_to_uah': Decimal('43.2000')})
+        self.stdout.write('✓ Курси валют створені')
 
         # Номенклатура
         products_data = [

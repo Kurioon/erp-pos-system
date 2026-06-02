@@ -40,6 +40,23 @@ class Nomenclature(models.Model):
         return f'{self.code} - {self.name}'
 
     def save(self, *args, **kwargs):
-        if self.purchase_price is not None and (self.sale_price is None or self.sale_price == Decimal('0.00')):
-            self.sale_price = (self.purchase_price * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))).quantize(Decimal('0.01'))
+        if self.purchase_price is not None:
+            # Перераховуємо sale_price якщо:
+            # 1. sale_price ще не встановлений
+            # 2. або purchase_price змінився (порівнюємо з БД)
+            should_recalc = self.sale_price is None or self.sale_price == Decimal('0.00')
+
+            if not should_recalc and self.pk:
+                try:
+                    old = Nomenclature.objects.get(pk=self.pk)
+                    if old.purchase_price != self.purchase_price or old.markup_percentage != self.markup_percentage:
+                        should_recalc = True
+                except Nomenclature.DoesNotExist:
+                    should_recalc = True
+
+            if should_recalc:
+                self.sale_price = (
+                    self.purchase_price * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))
+                ).quantize(Decimal('0.01'))
+
         super().save(*args, **kwargs)

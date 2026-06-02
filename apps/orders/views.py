@@ -17,7 +17,11 @@ from .services import process_refund, process_prepay
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
     serializer_class = CashRegisterSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdminRole()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         return CashRegister.objects.filter(warehouse__is_archived=False)
@@ -25,7 +29,11 @@ class CashRegisterListCreateView(generics.ListCreateAPIView):
 
 class CashRegisterDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CashRegisterSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
+            return [IsAdminRole()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         return CashRegister.objects.filter(warehouse__is_archived=False)
@@ -281,8 +289,6 @@ class OrderExportPDFView(APIView):
         return response
 
 
-# --- НОВІ ЕНДПОІНТИ (Міша B4) ---
-
 class OrderRefundView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -386,11 +392,6 @@ class OrderPrepayView(APIView):
 
 
 class OrderReceiptPDFView(APIView):
-    """
-    GET /api/orders/{id}/receipt/
-    Генерація PDF-чека для оплаченого замовлення.
-    Доступно лише для замовлень зі статусом 'paid'.
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
@@ -419,7 +420,6 @@ class OrderReceiptPDFView(APIView):
         p.drawString(50, 690, f'Balance due: {order.balance_due} UAH')
         p.drawString(50, 670, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
 
-        # Позиції замовлення
         p.setFont('Helvetica-Bold', 12)
         p.drawString(50, 640, 'Items:')
 
@@ -429,7 +429,7 @@ class OrderReceiptPDFView(APIView):
             line = f'{item.product.name}  x{item.quantity}  @ {item.price} UAH  = {item.quantity * item.price} UAH'
             p.drawString(60, y, line)
             y -= 20
-            if y < 50:  # запобігаємо виходу за межі сторінки
+            if y < 50:
                 p.showPage()
                 y = 800
                 p.setFont('Helvetica', 11)
@@ -441,3 +441,24 @@ class OrderReceiptPDFView(APIView):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
+
+from .models import ExchangeRate
+from .serializers import ExchangeRateSerializer
+
+# ЗАДАЧА 3 — Ендпоінти курсів валют
+class ExchangeRateListView(generics.ListAPIView):
+    """ GET /api/exchange-rates/ — всі курси (доступно всім авторизованим) """
+    queryset = ExchangeRate.objects.all()
+    serializer_class = ExchangeRateSerializer
+    permission_classes = [IsAuthenticated]
+
+class ExchangeRateUpdateView(generics.RetrieveUpdateAPIView):
+    """ PUT /api/exchange-rates/{currency}/ — оновити курс (тільки адмін) """
+    queryset = ExchangeRate.objects.all()
+    serializer_class = ExchangeRateSerializer
+    permission_classes = [IsAdminRole]
+    lookup_field = 'currency' # Дозволяє шукати по 'USD' замість ID
+
+    def perform_update(self, serializer):
+        # Записуємо, хто саме оновив курс
+        serializer.save(updated_by=self.request.user)

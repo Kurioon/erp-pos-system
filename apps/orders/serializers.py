@@ -34,7 +34,6 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        # При PATCH total_amount може бути відсутнім — беремо з instance якщо є
         instance = self.instance
         total = data.get('total_amount', instance.total_amount if instance else Decimal('0'))
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
@@ -44,15 +43,16 @@ class OrderSerializer(serializers.ModelSerializer):
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
             )
 
-        # Встановлюємо balance_due і статус лише при створенні (не при PATCH)
+        # БАГ 1 — при створенні забороняємо prepay_amount > 0
+        # Оплата тільки через POST /api/orders/{id}/prepay/
+        if not instance and prepay > 0:
+            raise serializers.ValidationError(
+                {'prepay_amount': 'При створенні замовлення передоплата має бути 0. Використовуйте POST /api/orders/{id}/prepay/'}
+            )
+
         if not instance:
-            data['balance_due'] = total - prepay
-            if data['balance_due'] == 0 and prepay > 0:
-                data['status'] = 'paid'
-            elif prepay > 0:
-                data['status'] = 'partial'
-            else:
-                data['status'] = 'draft'
+            data['balance_due'] = total
+            data['status'] = 'draft'
 
         return data
 

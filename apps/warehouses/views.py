@@ -12,6 +12,7 @@ from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 
+from activity_log.models import ActivityLog
 from .models import Warehouse, ServiceJob, WarehouseStock
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer
 
@@ -273,11 +274,18 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
     
     @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save()
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'create', instance)
 
     @transaction.atomic
     def perform_update(self, serializer):
-        serializer.save()
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'update', instance)
+
+    def perform_destroy(self, instance):
+        ActivityLog.log(self.request.user, 'delete', instance)
+        instance.is_archived = True
+        instance.save()
 
 
 class WarehouseStockViewSet(viewsets.ModelViewSet):

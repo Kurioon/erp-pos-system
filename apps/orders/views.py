@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
+from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
 from .services import process_refund, process_prepay
@@ -43,6 +44,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'create', instance)
+
     def get_queryset(self):
         queryset = Order.objects.filter(is_archived=False)
 
@@ -76,6 +81,10 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
             user=user
         )
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'update', instance)
+
     def update(self, request, *args, **kwargs):
         order = self.get_object()
 
@@ -89,6 +98,7 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         order = self.get_object()
+        ActivityLog.log(self.request.user, 'delete', order)
         order.is_archived = True
         order.save()
         return Response(status=status.HTTP_204_NO_CONTENT)

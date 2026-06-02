@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.permissions import IsAdminRole
+from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
 
@@ -56,6 +57,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
         return queryset
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'create', instance)
+
 
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
@@ -83,10 +88,15 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         return super().update(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'update', instance)
+
     def destroy(self, request, *args, **kwargs):
         order = self.get_object()
         order.is_archived = True
         order.save()
+        ActivityLog.log(self.request.user, 'delete', order)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

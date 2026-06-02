@@ -10,6 +10,7 @@ from rest_framework.decorators import action, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
+from activity_log.models import ActivityLog
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 
 from .models import Warehouse, ServiceJob, WarehouseStock
@@ -82,6 +83,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         
         self.perform_create(serializer)
         instance = serializer.instance
+        ActivityLog.log(self.request.user, 'create', instance)
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
         return Response(
@@ -139,6 +141,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
+        ActivityLog.log(self.request.user, 'update', instance)
         
         # For full update (PUT), return standard API contract
         return Response(
@@ -197,6 +200,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
+        ActivityLog.log(self.request.user, 'update', instance)
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200
         return Response(
@@ -217,6 +221,7 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         instance.is_archived = True
         instance.save()
+        ActivityLog.log(self.request.user, 'delete', instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # --- НОВІ ЕНДПОІНТИ ---

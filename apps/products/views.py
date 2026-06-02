@@ -7,7 +7,7 @@ from .serializers import NomenclatureSerializer
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Nomenclature.objects.all().order_by('code')
+    queryset = Nomenclature.objects.filter(is_archived=False).order_by('code')
     serializer_class = NomenclatureSerializer
 
     def get_queryset(self):
@@ -55,4 +55,5 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         ActivityLog.log(self.request.user, 'delete', instance)
-        instance.delete()
+        instance.is_archived = True
+        instance.save()

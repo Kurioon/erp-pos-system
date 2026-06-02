@@ -6,13 +6,12 @@ def add_stock(warehouse, nomenclature, quantity: int):
     if quantity <= 0:
         raise ValueError("Кількість для додавання має бути більшою за нуль.")
     
-    # ВИПРАВЛЕНО: Додано фільтр is_archived=False перед get_or_create
-    stock, created = WarehouseStock.objects.filter(is_archived=False).get_or_create(
-        warehouse=warehouse, 
+    stock, _ = WarehouseStock.objects.get_or_create(
+        warehouse=warehouse,
         nomenclature=nomenclature,
-        defaults={'quantity': 0}
+        defaults={'quantity': 0, 'is_archived': False}
     )
-    
+    stock.is_archived = False
     stock.quantity += quantity
     stock.save()
     
@@ -23,8 +22,11 @@ def remove_stock(warehouse, nomenclature, quantity: int):
     if quantity <= 0:
         raise ValueError("Кількість для списання має бути більшою за нуль.")
     
-    # ВИПРАВЛЕНО: Додано is_archived=False до фільтра
-    stock = WarehouseStock.objects.filter(
+    # ДОДАНО select_for_update(): 
+    # Блокує цей конкретний рядок у базі даних до кінця транзакції. 
+    # Якщо два касири одночасно спробують продати останній товар, 
+    # другий зачекає, поки перший не завершить дію, і отримає помилку нестачі.
+    stock = WarehouseStock.objects.select_for_update().filter(
         warehouse=warehouse, 
         nomenclature=nomenclature,
         is_archived=False

@@ -36,7 +36,7 @@ DEBUG = env('DEBUG')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Application definition
 
@@ -98,7 +98,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-'default': env.db('DATABASE_URL', default='sqlite:///db.sqlite3')
+    'default': {
+        **env.db('DATABASE_URL', default='sqlite:///db.sqlite3'),
+        'OPTIONS': {
+            'options': '-c client_encoding=UTF8',
+        },
+    }
 }
 
 
@@ -142,7 +147,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 AUTH_USER_MODEL = 'users.CustomUser'
 
 # --- НАЛАШТУВАННЯ CORS ТА CSRF ДЛЯ ФРОНТЕНДУ ---
-# Дозволяємо запити з локального фронтенду Vue (стандартний порт 5173)
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -151,6 +155,12 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ])
+
+# Дозволяємо кастомний заголовок X-Timezone від фронтенду
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'X-Timezone',
+]
 
 # --- НАЛАШТУВАННЯ REST FRAMEWORK ТА JWT ---
 
@@ -171,7 +181,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # Токен доступу живе 1 годину
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),     # Токен доступу живе 2 години
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Токен оновлення живе 1 день
     'AUTH_HEADER_TYPES': ('Bearer',),               # Фронтенд передаватиме токен як "Bearer <token>"
 }
@@ -206,3 +216,12 @@ STORAGES = {
 # Заглушка (Workaround) для застарілої бібліотеки django-cloudinary-storage, 
 # щоб вона не викидала AttributeError під час збірки Docker:
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Безпека для продакшену (Render вже надає HTTPS)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

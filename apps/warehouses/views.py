@@ -36,6 +36,16 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         instance.is_archived = True
         instance.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    def get_permissions(self):
+        """
+        Динамічні дозволи:
+        - create, update, partial_update, destroy -> тільки Адмін.
+        - list, retrieve -> всі авторизовані користувачі.
+        """
+        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+            return [IsAdminRole()]
+        return [IsAuthenticated()]
 
 
 class ServiceJobViewSet(viewsets.ModelViewSet):

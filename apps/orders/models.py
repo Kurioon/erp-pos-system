@@ -1,6 +1,5 @@
 from django.db import models
 
-
 class CashRegister(models.Model):
     name = models.CharField(max_length=255)
     warehouse = models.ForeignKey(
@@ -12,7 +11,6 @@ class CashRegister(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class Order(models.Model):
     STATUS_CHOICES = [
@@ -53,12 +51,16 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} — {self.status}"
 
-
 class Transaction(models.Model):
+    # ЗАДАЧА 4 — Розширено типи транзакцій
     TRANSACTION_TYPE_CHOICES = [
-        ('prepay', 'Prepayment'),
-        ('payment', 'Payment'),
-        ('refund', 'Refund'),
+        ('prepay', 'Передоплата'),
+        ('payment', 'Оплата'),
+        ('refund', 'Повернення коштів'),
+        ('sale', 'Продаж'),
+        ('income', 'Внесення'),
+        ('expense', 'Видача'),
+        ('return', 'Повернення товару'),
     ]
     CURRENCY_CHOICES = [
         ('UAH', 'UAH'),
@@ -69,7 +71,8 @@ class Transaction(models.Model):
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
-        related_name='transactions'
+        related_name='transactions',
+        null=True, blank=True # Додано null=True, щоб дозволити внесення/видачу без прив'язки до замовлення
     )
     cash_register = models.ForeignKey(
         CashRegister,
@@ -90,7 +93,6 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.transaction_type} — {self.amount} {self.currency}"
 
-
 class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,
@@ -107,3 +109,15 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f'{self.product.name} x {self.quantity}'
+
+# ЗАДАЧА 3 — Модель для курсів валют
+class ExchangeRate(models.Model):
+    currency = models.CharField(max_length=3, unique=True)
+    rate_to_uah = models.DecimalField(max_digits=10, decimal_places=4)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'users.CustomUser', on_delete=models.SET_NULL, null=True
+    )
+
+    def __str__(self):
+        return f"{self.currency}: {self.rate_to_uah}"

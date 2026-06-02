@@ -392,3 +392,24 @@ class OrderReceiptPDFView(APIView):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
+
+from .models import ExchangeRate
+from .serializers import ExchangeRateSerializer
+
+# ЗАДАЧА 3 — Ендпоінти курсів валют
+class ExchangeRateListView(generics.ListAPIView):
+    """ GET /api/exchange-rates/ — всі курси (доступно всім авторизованим) """
+    queryset = ExchangeRate.objects.all()
+    serializer_class = ExchangeRateSerializer
+    permission_classes = [IsAuthenticated]
+
+class ExchangeRateUpdateView(generics.RetrieveUpdateAPIView):
+    """ PUT /api/exchange-rates/{currency}/ — оновити курс (тільки адмін) """
+    queryset = ExchangeRate.objects.all()
+    serializer_class = ExchangeRateSerializer
+    permission_classes = [IsAdminRole]
+    lookup_field = 'currency' # Дозволяє шукати по 'USD' замість ID
+
+    def perform_update(self, serializer):
+        # Записуємо, хто саме оновив курс
+        serializer.save(updated_by=self.request.user)

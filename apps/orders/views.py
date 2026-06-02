@@ -65,6 +65,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
         return queryset
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'create', instance)
+
 
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
@@ -96,11 +100,16 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         return super().update(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'update', instance)
+
     def destroy(self, request, *args, **kwargs):
         order = self.get_object()
         ActivityLog.log(self.request.user, 'delete', order)
         order.is_archived = True
         order.save()
+        ActivityLog.log(self.request.user, 'delete', order)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

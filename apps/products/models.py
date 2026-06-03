@@ -59,6 +59,11 @@ class Nomenclature(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
-        if self.purchase_price is not None and (self.sale_price is None or self.sale_price == Decimal('0.00')):
+        if self.purchase_price is not None and self.sale_price is not None and self.sale_price != Decimal('0.00'):
+            self.markup_percentage = (
+                (self.sale_price / self.purchase_price - Decimal('1.00'))
+                * Decimal('100.00')
+            ).quantize(Decimal('0.01'))
+        elif self.purchase_price is not None and (self.sale_price is None or self.sale_price == Decimal('0.00')):
             self.sale_price = (self.purchase_price * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))).quantize(Decimal('0.01'))
         super().save(*args, **kwargs)

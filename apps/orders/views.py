@@ -1,14 +1,18 @@
 import csv
 import io
+from decimal import Decimal
 from django.http import HttpResponse
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
+from .services import process_refund, process_prepay
 
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
@@ -110,7 +114,14 @@ class OrderItemListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         order_id = self.kwargs.get('order_id')
-        order = Order.objects.get(pk=order_id)
+        try:
+            order = Order.objects.get(pk=order_id)
+        except Order.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Замовлення не знайдено.')
+        if order.status != 'draft':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Додавати позиції можна лише до замовлення зі статусом draft.')
         serializer.save(order=order)
 
 
@@ -145,7 +156,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         return queryset
 
 
-class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
+class TransactionDetailView(generics.RetrieveAPIView):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
@@ -155,10 +166,11 @@ class OrderExportCSVView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="orders.csv"'
+        response.write('﻿'.encode('utf-8'))
 
-        writer = csv.writer(response)
+        writer = csv.writer(response, delimiter=';')
         writer.writerow([
             'ID', 'Статус', 'Тип', 'Сума', 'Передоплата',
             'Борг', 'Коментар/ТТН', 'Дата створення'
@@ -192,10 +204,11 @@ class TransactionExportCSVView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="transactions.csv"'
+        response.write('﻿'.encode('utf-8'))
 
-        writer = csv.writer(response)
+        writer = csv.writer(response, delimiter=';')
         writer.writerow([
             'ID', 'Замовлення', 'Каса', 'Тип', 'Сума', 'Валюта', 'Дата'
         ])
@@ -256,4 +269,166 @@ class OrderExportPDFView(APIView):
         buffer.seek(0)
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="order_{order.id}.pdf"'
+        return response
+
+
+# --- НОВІ ЕНДПОІНТИ (Міша B4) ---
+
+class OrderRefundView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'cash_register': {'type': 'integer', 'example': 1},
+                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                },
+                'required': ['cash_register'],
+            }
+        },
+        description='Повернення оплаченого замовлення. Статус: paid → returned.',
+    )
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        cash_register_id = request.data.get('cash_register')
+        currency = request.data.get('currency', 'UAH')
+
+        if not cash_register_id:
+            return Response({'error': 'Поле cash_register є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            cash_register = CashRegister.objects.get(pk=cash_register_id)
+        except CashRegister.DoesNotExist:
+            return Response({'error': 'Касу не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            t = process_refund(order, currency, cash_register, request.user)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.refresh_from_db()
+        return Response({
+            'order_id': order.id,
+            'status': order.status,
+            'transaction_id': t.id,
+        }, status=status.HTTP_201_CREATED)
+
+
+class OrderPrepayView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'amount': {'type': 'string', 'example': '500.00'},
+                    'cash_register': {'type': 'integer', 'example': 1},
+                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                },
+                'required': ['amount', 'cash_register'],
+            }
+        },
+        description='Передоплата замовлення. Статус: draft → partial або paid залежно від суми.',
+    )
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        amount_raw = request.data.get('amount')
+        currency = request.data.get('currency', 'UAH')
+        cash_register_id = request.data.get('cash_register')
+
+        if not amount_raw:
+            return Response({'error': 'Поле amount є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not cash_register_id:
+            return Response({'error': 'Поле cash_register є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            amount = Decimal(str(amount_raw))
+        except Exception:
+            return Response({'error': 'Некоректне значення amount.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            cash_register = CashRegister.objects.get(pk=cash_register_id)
+        except CashRegister.DoesNotExist:
+            return Response({'error': 'Касу не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            t = process_prepay(order, amount, currency, cash_register, request.user)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'order_id': order.id,
+            'status': order.status,
+            'balance_due': order.balance_due,
+            'transaction_id': t.id,
+        }, status=status.HTTP_201_CREATED)
+
+
+class OrderReceiptPDFView(APIView):
+    """
+    GET /api/orders/{id}/receipt/
+    Генерація PDF-чека для оплаченого замовлення.
+    Доступно лише для замовлень зі статусом 'paid'.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+
+        try:
+            order = Order.objects.get(pk=pk, status='paid')
+        except Order.DoesNotExist:
+            return Response(
+                {'error': 'Оплачене замовлення не знайдено. Чек доступний лише для статусу paid.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer, pagesize=A4)
+
+        p.setFont('Helvetica-Bold', 16)
+        p.drawString(50, 800, f'Receipt — Order #{order.id}')
+
+        p.setFont('Helvetica', 12)
+        p.drawString(50, 770, f'Status: {order.status}')
+        p.drawString(50, 750, f'Type: {order.order_type}')
+        p.drawString(50, 730, f'Total: {order.total_amount} UAH')
+        p.drawString(50, 710, f'Paid: {order.prepay_amount} UAH')
+        p.drawString(50, 690, f'Balance due: {order.balance_due} UAH')
+        p.drawString(50, 670, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
+
+        # Позиції замовлення
+        p.setFont('Helvetica-Bold', 12)
+        p.drawString(50, 640, 'Items:')
+
+        y = 620
+        p.setFont('Helvetica', 11)
+        for item in order.items.select_related('product').all():
+            line = f'{item.product.name}  x{item.quantity}  @ {item.price} UAH  = {item.quantity * item.price} UAH'
+            p.drawString(60, y, line)
+            y -= 20
+            if y < 50:  # запобігаємо виходу за межі сторінки
+                p.showPage()
+                y = 800
+                p.setFont('Helvetica', 11)
+
+        p.showPage()
+        p.save()
+
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response

@@ -13,6 +13,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = '__all__'
+        read_only_fields = ['order']
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -34,22 +35,25 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        total = data.get('total_amount', Decimal('0'))
-        prepay = data.get('prepay_amount', Decimal('0'))
+        # При PATCH total_amount може бути відсутнім — беремо з instance якщо є
+        instance = self.instance
+        total = data.get('total_amount', instance.total_amount if instance else Decimal('0'))
+        prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
 
         if prepay > total:
             raise serializers.ValidationError(
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
             )
 
-        data['balance_due'] = total - prepay
-
-        if data['balance_due'] == 0 and prepay > 0:
-            data['status'] = 'paid'
-        elif prepay > 0:
-            data['status'] = 'partial'
-        else:
-            data['status'] = 'draft'
+        # Встановлюємо balance_due і статус лише при створенні (не при PATCH)
+        if not instance:
+            data['balance_due'] = total - prepay
+            if data['balance_due'] == 0 and prepay > 0:
+                data['status'] = 'paid'
+            elif prepay > 0:
+                data['status'] = 'partial'
+            else:
+                data['status'] = 'draft'
 
         return data
 

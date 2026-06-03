@@ -23,10 +23,16 @@ def _validate_transition(order: Order, new_status: str):
 
 @transaction.atomic
 def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
-    _validate_transition(order, 'partial')
+    if order.status not in ('draft', 'partial'):
+        raise ValueError(f"Неможливо прийняти оплату для замовлення зі статусом '{order.status}'.")
 
-    if amount > order.total_amount:
-        raise ValueError('Передоплата не може перевищувати загальну суму замовлення.')
+    if amount <= 0:
+        raise ValueError('Сума оплати має бути більшою за нуль.')
+
+    if amount > order.balance_due:
+        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due}.')
+
+    is_first_payment = order.status == 'draft'
 
     t = Transaction.objects.create(
         order=order,
@@ -37,15 +43,18 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         transaction_type='prepay',
     )
 
-    order.prepay_amount = amount
-    order.balance_due = order.total_amount - amount
+    order.prepay_amount += amount
+    order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
         order.status = 'paid'
-        _deduct_order_items(order)
     else:
         order.status = 'partial'
+
+    # Списуємо товар тільки при першій оплаті (draft → partial/paid)
+    if is_first_payment:
+        _deduct_order_items(order)
 
     order.save()
     return t
@@ -70,7 +79,6 @@ def process_payment(order: Order, amount: Decimal, currency: str, cash_register,
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
         order.status = 'paid'
-        _deduct_order_items(order)
 
     order.save()
     return t
@@ -126,9 +134,9 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
 
 def _deduct_order_items(order: Order):
     for item in order.items.all():
-        remove_stock(product=item.product, warehouse=order.cash_register.warehouse, qty=item.quantity)
+        remove_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)
 
 
 def _return_order_items(order: Order):
     for item in order.items.all():
-        add_stock(product=item.product, warehouse=order.cash_register.warehouse, qty=item.quantity)
+        add_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)

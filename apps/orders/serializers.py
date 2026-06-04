@@ -1,6 +1,5 @@
 from decimal import Decimal
 from rest_framework import serializers
-from django.db.models import Sum
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
 class CashRegisterSerializer(serializers.ModelSerializer):
@@ -14,16 +13,20 @@ class CashRegisterSerializer(serializers.ModelSerializer):
     def get_balance(self, obj):
         income_types = ('prepay', 'payment', 'sale', 'income')
         expense_types = ('refund', 'return', 'expense')
-        
-        income = obj.transactions.filter(
-            transaction_type__in=income_types
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        expense = obj.transactions.filter(
-            transaction_type__in=expense_types
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        return income - expense
+
+        # Транзакції можуть бути в різних валютах — приводимо все до гривні
+        rates = {er.currency: er.rate_to_uah for er in ExchangeRate.objects.all()}
+        rates['UAH'] = Decimal('1')
+
+        balance = Decimal('0.00')
+        for t in obj.transactions.all():
+            amount_uah = t.amount * rates.get(t.currency, Decimal('1'))
+            if t.transaction_type in income_types:
+                balance += amount_uah
+            elif t.transaction_type in expense_types:
+                balance -= amount_uah
+
+        return balance.quantize(Decimal('0.01'))
 
 
 # БАГ 3 — Серіалізатор постачальників
@@ -46,8 +49,8 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
-        # Якщо ти раніше застосовував фікс BUG-002, можеш додати сюди 'total_amount', 'prepay_amount'
-        read_only_fields = ['balance_due', 'status']
+        # user проставляється автоматично з request (автор замовлення)
+        read_only_fields = ['balance_due', 'status', 'user']
 
     def validate_total_amount(self, value):
         if value <= 0:
@@ -99,6 +102,18 @@ class TransactionSerializer(serializers.ModelSerializer):
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError('Сума транзакції повинна бути більше нуля.')
+        return value
+
+    def validate_transaction_type(self, value):
+        # Прямо через API дозволені лише касові операції внесення/видачі.
+        # prepay/payment/sale/refund/return формуються автоматично сервісами
+        # замовлень (prepay/refund/cancel), щоб не накручувати баланс каси.
+        allowed = ('income', 'expense')
+        if value not in allowed:
+            raise serializers.ValidationError(
+                "Прямо створювати можна лише 'income' (внесення) або 'expense' (видача). "
+                "Решта типів формуються через операції із замовленням."
+            )
         return value
 
     def create(self, validated_data):

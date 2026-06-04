@@ -102,6 +102,11 @@ class Command(BaseCommand):
                     'vat_rate': Decimal(vat),
                 }
             )
+            # Уявна опт-ціна для демо: закупівельна + 10%.
+            # Дозаповнюємо лише якщо ще не задано (ідемпотентність seed).
+            if p.wholesale_price is None:
+                p.wholesale_price = (Decimal(purchase) * Decimal('1.10')).quantize(Decimal('0.01'))
+                p.save()
             created_products.append(p)
 
         self.stdout.write(f'✓ {len(created_products)} товарів створено/знайдено')

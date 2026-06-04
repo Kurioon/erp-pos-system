@@ -17,10 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from users.views import health_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
+
+    # Health-check для Uptime Robot (без авторизації) -> /api/health/
+    path('api/health/', health_check, name='health_check'),
+
     path('api/auth/', include('users.urls', namespace='auth')),
 
     # Підключаємо твої маршрути під префіксом /api/

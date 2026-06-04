@@ -3,6 +3,7 @@ import csv
 from django.db.models import Q
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from config.pdf_utils import ensure_pdf_font
 from django.http import HttpResponse
 from django.db import transaction
 from rest_framework import viewsets, status, permissions
@@ -292,13 +293,14 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='export/pdf', permission_classes=[IsAuthenticated])
     def export_pdf(self, request, pk=None):
         job = self.get_object()
+        ensure_pdf_font()
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, pagesize=A4)
         
-        p.setFont("Helvetica-Bold", 16)
+        p.setFont("DejaVu", 16)
         p.drawString(100, 800, f"Service Job Ticket #{job.id}")
         
-        p.setFont("Helvetica", 12)
+        p.setFont("DejaVu", 12)
         p.drawString(100, 770, f"Customer: {job.customer_name}")
         p.drawString(100, 750, f"Phone: {job.customer_phone}")
         p.drawString(100, 730, f"Device: {job.device_name}")

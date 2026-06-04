@@ -12,6 +12,7 @@ from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
 from .services import process_refund, process_prepay, process_cancellation
+from config.pdf_utils import ensure_pdf_font
 
 
 # Типи транзакцій які продавець НЕ може створювати вручну
@@ -312,6 +313,7 @@ class OrderExportPDFView(APIView):
     def get(self, request, pk):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
+        ensure_pdf_font()
 
         # BUG-07 — перевірка власника
         user = request.user
@@ -331,9 +333,9 @@ class OrderExportPDFView(APIView):
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, pagesize=A4)
 
-        p.setFont('Helvetica-Bold', 16)
+        p.setFont('DejaVu', 16)
         p.drawString(50, 800, f'Order #{order.id}')
-        p.setFont('Helvetica', 12)
+        p.setFont('DejaVu', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
         p.drawString(50, 730, f'Total: {order.total_amount}')
@@ -494,34 +496,29 @@ class OrderReceiptPDFView(APIView):
     def get(self, request, pk):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
+        ensure_pdf_font()
 
         # BUG-07 — перевірка власника
+        # Чек доступний для замовлень, де вже була оплата (partial або paid).
         user = request.user
+        paid_statuses = ['partial', 'paid']
         try:
             if hasattr(user, 'role') and user.role == 'admin':
-                order = Order.objects.get(pk=pk, status='paid')
+                order = Order.objects.get(pk=pk, status__in=paid_statuses)
             else:
-                order = Order.objects.get(pk=pk, status='paid', user=user)
+                order = Order.objects.get(pk=pk, status__in=paid_statuses, user=user)
         except Order.DoesNotExist:
             return Response(
-                {'error': 'Оплачене замовлення не знайдено або доступ заборонено.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Продавець може отримати чек лише власних замовлень
-        user = request.user
-        if not (hasattr(user, 'role') and user.role == 'admin') and order.user_id != user.id:
-            return Response(
-                {'error': 'Оплачене замовлення не знайдено. Чек доступний лише для статусу paid.'},
+                {'error': 'Чек доступний лише для оплачених або частково оплачених замовлень.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, pagesize=A4)
 
-        p.setFont('Helvetica-Bold', 16)
+        p.setFont('DejaVu', 16)
         p.drawString(50, 800, f'Receipt — Order #{order.id}')
-        p.setFont('Helvetica', 12)
+        p.setFont('DejaVu', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
         p.drawString(50, 730, f'Total: {order.total_amount} UAH')
@@ -529,11 +526,11 @@ class OrderReceiptPDFView(APIView):
         p.drawString(50, 690, f'Balance due: {order.balance_due} UAH')
         p.drawString(50, 670, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
 
-        p.setFont('Helvetica-Bold', 12)
+        p.setFont('DejaVu', 12)
         p.drawString(50, 640, 'Items:')
 
         y = 620
-        p.setFont('Helvetica', 11)
+        p.setFont('DejaVu', 11)
         for item in order.items.select_related('product').all():
             line = f'{item.product.name}  x{item.quantity}  @ {item.price} UAH  = {item.quantity * item.price} UAH'
             p.drawString(60, y, line)
@@ -541,7 +538,7 @@ class OrderReceiptPDFView(APIView):
             if y < 50:
                 p.showPage()
                 y = 800
-                p.setFont('Helvetica', 11)
+                p.setFont('DejaVu', 11)
 
         p.showPage()
         p.save()

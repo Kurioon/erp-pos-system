@@ -1,10 +1,11 @@
 from decimal import Decimal
 from rest_framework import serializers
-from django.db.models import Sum
+from django.db.models import Sum, F
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
+
 class CashRegisterSerializer(serializers.ModelSerializer):
-    # ЗАДАЧА 5 — Динамічний баланс
+    # BUG-02 — баланс окремо по валютах
     balance = serializers.SerializerMethodField()
 
     class Meta:
@@ -14,19 +15,30 @@ class CashRegisterSerializer(serializers.ModelSerializer):
     def get_balance(self, obj):
         income_types = ('prepay', 'payment', 'sale', 'income')
         expense_types = ('refund', 'return', 'expense')
-        
-        income = obj.transactions.filter(
+
+        # Групуємо по валютах окремо
+        income_by_currency = obj.transactions.filter(
             transaction_type__in=income_types
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        expense = obj.transactions.filter(
+        ).values('currency').annotate(total=Sum('amount'))
+
+        expense_by_currency = obj.transactions.filter(
             transaction_type__in=expense_types
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        return income - expense
+        ).values('currency').annotate(total=Sum('amount'))
+
+        income_map = {item['currency']: item['total'] for item in income_by_currency}
+        expense_map = {item['currency']: item['total'] for item in expense_by_currency}
+
+        all_currencies = set(income_map.keys()) | set(expense_map.keys())
+
+        balance = {}
+        for currency in all_currencies:
+            income = income_map.get(currency, Decimal('0'))
+            expense = expense_map.get(currency, Decimal('0'))
+            balance[currency] = income - expense
+
+        return balance
 
 
-# БАГ 3 — Серіалізатор постачальників
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
@@ -46,13 +58,8 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
-        # Якщо ти раніше застосовував фікс BUG-002, можеш додати сюди 'total_amount', 'prepay_amount'
-        read_only_fields = ['balance_due', 'status']
-
-    def validate_total_amount(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Загальна сума повинна бути більше нуля.')
-        return value
+        # BUG-05 — user read_only
+        read_only_fields = ['balance_due', 'status', 'user', 'total_amount']
 
     def validate_prepay_amount(self, value):
         if value < 0:
@@ -64,7 +71,6 @@ class OrderSerializer(serializers.ModelSerializer):
         total = data.get('total_amount', instance.total_amount if instance else Decimal('0'))
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
 
-        # БАГ 3 — Валідація постачальника
         order_type = data.get('order_type', instance.order_type if instance else None)
         supplier = data.get('supplier', instance.supplier if instance else None)
 
@@ -78,7 +84,6 @@ class OrderSerializer(serializers.ModelSerializer):
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
             )
 
-        # БАГ 1 (вже був пофікшений тобою)
         if not instance and prepay > 0:
             raise serializers.ValidationError(
                 {'prepay_amount': 'При створенні замовлення передоплата має бути 0. Використовуйте POST /api/orders/{id}/prepay/'}
@@ -89,6 +94,7 @@ class OrderSerializer(serializers.ModelSerializer):
             data['status'] = 'draft'
 
         return data
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -107,7 +113,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             validated_data['user'] = request.user
         return super().create(validated_data)
 
-# ЗАДАЧА 3 — Серіалізатор курсів
+
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate

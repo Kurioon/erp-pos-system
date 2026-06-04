@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.db import transaction
-from .models import Order, Transaction
+from .models import Order, Transaction, ExchangeRate
 from warehouses.services import add_stock, remove_stock
 
 
@@ -21,6 +21,17 @@ def _validate_transition(order: Order, new_status: str):
         )
 
 
+def _convert_to_uah(amount: Decimal, currency: str) -> Decimal:
+    """BUG-01 — конвертація суми в UAH через ExchangeRate"""
+    if currency == 'UAH':
+        return amount
+    try:
+        rate = ExchangeRate.objects.get(currency=currency)
+        return amount * rate.rate_to_uah
+    except ExchangeRate.DoesNotExist:
+        raise ValueError(f'Курс валюти {currency} не знайдено. Зверніться до адміністратора.')
+
+
 @transaction.atomic
 def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
     if order.status not in ('draft', 'partial'):
@@ -29,7 +40,10 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     if amount <= 0:
         raise ValueError('Сума оплати має бути більшою за нуль.')
 
-    if amount > order.balance_due:
+    # BUG-01 — конвертуємо в UAH перед розрахунком
+    amount_uah = _convert_to_uah(amount, currency)
+
+    if amount_uah > order.balance_due:
         raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due}.')
 
     is_first_payment = order.status == 'draft'
@@ -43,7 +57,7 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         transaction_type='prepay',
     )
 
-    order.prepay_amount += amount
+    order.prepay_amount += amount_uah
     order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:
@@ -52,7 +66,6 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     else:
         order.status = 'partial'
 
-    # Списуємо товар тільки при першій оплаті (draft → partial/paid)
     if is_first_payment:
         _deduct_order_items(order)
 
@@ -64,6 +77,9 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
 def process_payment(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
     _validate_transition(order, 'paid')
 
+    # BUG-01 — конвертуємо в UAH
+    amount_uah = _convert_to_uah(amount, currency)
+
     t = Transaction.objects.create(
         order=order,
         cash_register=cash_register,
@@ -73,7 +89,7 @@ def process_payment(order: Order, amount: Decimal, currency: str, cash_register,
         transaction_type='payment',
     )
 
-    order.prepay_amount += amount
+    order.prepay_amount += amount_uah
     order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:

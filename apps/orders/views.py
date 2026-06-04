@@ -176,7 +176,7 @@ class OrderExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="orders.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -214,7 +214,7 @@ class TransactionExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="transactions.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -233,7 +233,7 @@ class TransactionExportCSVView(APIView):
         for t in transactions:
             writer.writerow([
                 t.id,
-                t.order.id,
+                t.order.id if t.order else '', # <--- ФІКС ТУТ: Безпечна перевірка наявності order
                 t.cash_register.name,
                 t.transaction_type,
                 t.amount,

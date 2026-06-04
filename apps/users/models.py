@@ -10,6 +10,11 @@ class CustomUserManager(BaseUserManager):
         if not email:
             raise ValueError('Email є обов\'язковим полем')
         email = self.normalize_email(email)
+        
+        # Автоматично генеруємо username з email для сумісності з БД
+        if 'username' not in extra_fields:
+            extra_fields['username'] = email
+
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -33,9 +38,6 @@ class CustomUser(AbstractUser):
         ('admin', 'Адміністратор'),
         ('seller', 'Продавець'),
     ]
-    
-    # Вимикаємо стандартний username
-    username = None 
     
     name = models.CharField(max_length=255)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='seller')

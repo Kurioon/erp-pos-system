@@ -2,7 +2,9 @@ import io
 import csv
 from django.db.models import Q
 from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code128
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
 from django.http import HttpResponse
 from django.db import transaction
 from rest_framework import viewsets, status, permissions
@@ -296,9 +298,20 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         p.drawString(100, 750, f"Phone: {job.customer_phone}")
         p.drawString(100, 730, f"Device: {job.device_name}")
         p.drawString(100, 710, f"Status: {job.get_status_display()}")
-        
+
         if job.storage_cell:
             p.drawString(100, 690, f"Storage Cell: {job.storage_cell}")
+            barcode_y = 640
+        else:
+            barcode_y = 650
+
+        barcode_value = str(job.id)
+        barcode = code128.Code128(barcode_value, barWidth=0.4 * mm, barHeight=30 * mm)
+        barcode_x = 100
+        barcode.drawOn(p, barcode_x, barcode_y)
+
+        p.setFont("Helvetica", 10)
+        p.drawString(barcode_x, barcode_y - 14, f"Barcode: {barcode_value}")
 
         p.showPage()
         p.save()

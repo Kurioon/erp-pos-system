@@ -96,6 +96,42 @@ class OrderSerializer(serializers.ModelSerializer):
 
         return data
 
+    # ------------------------------------------------------------------
+    # НОВИЙ МЕТОД: Обробка збереження товарів при створенні замовлення
+    # ------------------------------------------------------------------
+    def create(self, validated_data):
+        # 1. Отримуємо масив 'items' напряму з сирих даних запиту
+        items_data = self.initial_data.get('items', [])
+        
+        # 2. Створюємо саме замовлення
+        order = super().create(validated_data)
+        
+        # 3. Імпортуємо модель Nomenclature локально для отримання ціни
+        from products.models import Nomenclature 
+        
+        # 4. Створюємо позиції замовлення (OrderItem)
+        for item in items_data:
+            product_id = item.get('product')
+            quantity = item.get('quantity')
+            
+            if product_id and quantity:
+                try:
+                    product = Nomenclature.objects.get(pk=product_id)
+                    # Визначаємо ціну: роздрібна чи закупівельна залежно від типу замовлення
+                    price = product.sale_price if order.order_type == 'retail' else product.purchase_price
+                    
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        quantity=quantity,
+                        price=price
+                    )
+                except Nomenclature.DoesNotExist:
+                    # Якщо товар з таким ID раптом не знайдено, просто пропускаємо
+                    pass
+                
+        return order
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:

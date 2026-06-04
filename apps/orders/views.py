@@ -371,6 +371,21 @@ class OrderRefundView(APIView):
 class OrderPrepayView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # Додаємо схему для Swagger, щоб з'явилося поле Request body
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'amount': {'type': 'string', 'example': '500.00'},
+                    'currency': {'type': 'string', 'example': 'UAH'},
+                    'cash_register': {'type': 'integer', 'example': 2},
+                },
+                'required': ['amount', 'cash_register'],
+            }
+        },
+        description='Оплата або передоплата замовлення',
+    )
     def post(self, request, pk):
         try:
             order = Order.objects.get(pk=pk)

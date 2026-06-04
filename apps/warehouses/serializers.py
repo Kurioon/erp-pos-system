@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from drf_spectacular.openapi import OpenApiTypes
-from .models import Warehouse, ServiceJob, WarehouseStock
+from .models import StockMovement, Warehouse, ServiceJob, WarehouseStock
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -127,3 +127,14 @@ class WarehouseStockSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Кількість не може бути від'ємною.")
         return value
+    
+class StockMovementSerializer(serializers.ModelSerializer):
+    warehouse = serializers.CharField(source='warehouse.name', read_only=True)
+    nomenclature = serializers.CharField(source='nomenclature.name', read_only=True)
+
+    class Meta:
+        model = StockMovement
+        fields = [
+            'id', 'warehouse', 'nomenclature', 'quantity_change', 
+            'quantity_before', 'quantity_after', 'reason', 'order', 'created_at'
+        ]

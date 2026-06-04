@@ -121,8 +121,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         
         self.perform_create(serializer)
         instance = serializer.instance
-        ActivityLog.log(self.request.user, 'create', instance)
-        
+        # Логування — у perform_create (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
         return Response(
             {
@@ -179,8 +179,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # For full update (PUT), return standard API contract
         return Response(
             {
@@ -238,8 +238,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200
         return Response(
             {
@@ -406,7 +406,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
             return Response({"error": "Формат файлу має бути CSV."}, 
                             status=status.HTTP_400_BAD_REQUEST)
 
-        decoded_file = file.read().decode('utf-8')
+        decoded_file = file.read().decode('utf-8-sig')  # utf-8-sig знімає BOM, якщо є
         io_string = io.StringIO(decoded_file)
         reader = csv.reader(io_string, delimiter=';') 
         

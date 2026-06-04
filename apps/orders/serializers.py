@@ -1,7 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 from django.db.models import Sum
-from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
 class CashRegisterSerializer(serializers.ModelSerializer):
     # ЗАДАЧА 5 — Динамічний баланс
@@ -25,11 +25,20 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         
         return income - expense
 
+
+# БАГ 3 — Серіалізатор постачальників
+class SupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supplier
+        fields = '__all__'
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = '__all__'
         read_only_fields = ['order']
+
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -37,6 +46,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
+        # Якщо ти раніше застосовував фікс BUG-002, можеш додати сюди 'total_amount', 'prepay_amount'
         read_only_fields = ['balance_due', 'status']
 
     def validate_total_amount(self, value):
@@ -53,6 +63,15 @@ class OrderSerializer(serializers.ModelSerializer):
         instance = self.instance
         total = data.get('total_amount', instance.total_amount if instance else Decimal('0'))
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
+
+        # БАГ 3 — Валідація постачальника
+        order_type = data.get('order_type', instance.order_type if instance else None)
+        supplier = data.get('supplier', instance.supplier if instance else None)
+
+        if order_type == 'retail' and supplier is not None:
+            raise serializers.ValidationError(
+                {'supplier': 'Роздрібне замовлення (retail) не може мати постачальника.'}
+            )
 
         if prepay > total:
             raise serializers.ValidationError(

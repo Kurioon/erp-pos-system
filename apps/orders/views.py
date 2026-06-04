@@ -91,6 +91,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
+        # order_type=retail|purchase — щоб «Закупівлі» не змішувались із роздрібними
+        order_type = self.request.query_params.get('order_type')
+        if order_type:
+            queryset = queryset.filter(order_type=order_type)
+
         cash_register = self.request.query_params.get('cash_register')
         if cash_register:
             queryset = queryset.filter(cash_register_id=cash_register)
@@ -98,6 +103,15 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user_filter = self.request.query_params.get('user')
         if user_filter:
             queryset = queryset.filter(user_id=user_filter)
+
+        # Стабільне сортування — обов'язкове для коректної пагінації
+        # (без ORDER BY PostgreSQL може дублювати/пропускати записи між сторінками).
+        # Підтримуємо ?ordering= з фронту, дефолт — найновіші першими.
+        ordering = self.request.query_params.get('ordering', '-created_at')
+        allowed_ordering = {'created_at', '-created_at', 'id', '-id'}
+        if ordering not in allowed_ordering:
+            ordering = '-created_at'
+        queryset = queryset.order_by(ordering)
 
         return queryset
 

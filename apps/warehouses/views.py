@@ -353,9 +353,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         return WarehouseStock.objects.filter(
             is_archived=False
         ).select_related(
-            'warehouse', 
+            'warehouse',
             'nomenclature'
-        )
+        ).order_by('id')  # стабільний порядок — обов'язково для коректної пагінації
 
     def destroy(self, request, *args, **kwargs):
         """

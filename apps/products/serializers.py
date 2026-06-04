@@ -1,16 +1,21 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .models import Nomenclature
 
 
 class NomenclatureSerializer(serializers.ModelSerializer):
-    retail_price = serializers.DecimalField(
-        source='sale_price',
-        max_digits=12,
-        decimal_places=2,
-        write_only=True,
-        required=False
-    )
+
+    def validate_purchase_price(self, value):
+        if value <= Decimal('0.00'):
+            raise serializers.ValidationError('Ціна не може бути меншою або дорівнювати 0')
+        return value
+
+    def validate_sale_price(self, value):
+        if value is not None and value <= Decimal('0.00'):
+            raise serializers.ValidationError('Ціна не може бути меншою або дорівнювати 0')
+        return value
 
     class Meta:
         model = Nomenclature
@@ -26,9 +31,8 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             'purchase_price',
             'markup_percentage',
             'sale_price',
-            'retail_price',
             'vat_rate',
             'is_archived',
             'created_at',
-            'updated_at'
+            'updated_at',
         ]

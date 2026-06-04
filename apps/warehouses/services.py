@@ -1,5 +1,5 @@
 from django.db import transaction
-from .models import WarehouseStock
+from .models import StockMovement, WarehouseStock
 
 @transaction.atomic
 def add_stock(warehouse, nomenclature, quantity: int):
@@ -14,6 +14,21 @@ def add_stock(warehouse, nomenclature, quantity: int):
     stock.is_archived = False
     stock.quantity += quantity
     stock.save()
+
+    quantity_before = stock.quantity
+    stock.quantity -= quantity
+    stock.save()
+
+    # Записуємо історію руху
+    StockMovement.objects.create(
+        warehouse=warehouse,
+        nomenclature=nomenclature,
+        quantity_change=-quantity,
+        quantity_before=quantity_before,
+        quantity_after=stock.quantity,
+        reason='sale',
+        order=order
+    )
     
     return stock
 
@@ -40,5 +55,19 @@ def remove_stock(warehouse, nomenclature, quantity: int):
     
     stock.quantity -= quantity
     stock.save()
+
+    quantity_before = stock.quantity
+    stock.quantity += quantity
+    stock.save()
+
+    # Записуємо історію руху
+    StockMovement.objects.create(
+        warehouse=warehouse,
+        nomenclature=nomenclature,
+        quantity_change=quantity,
+        quantity_before=quantity_before,
+        quantity_after=stock.quantity,
+        reason='purchase'
+    )
     
     return stock

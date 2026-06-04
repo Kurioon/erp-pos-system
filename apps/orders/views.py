@@ -10,10 +10,9 @@ from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
-from .models import CashRegister, Order, Transaction, OrderItem
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer
 from .services import process_refund, process_prepay
-
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
     serializer_class = CashRegisterSerializer
@@ -432,9 +431,6 @@ class OrderReceiptPDFView(APIView):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
-
-from .models import ExchangeRate
-from .serializers import ExchangeRateSerializer
 
 # ЗАДАЧА 3 — Ендпоінти курсів валют
 class ExchangeRateListView(generics.ListAPIView):

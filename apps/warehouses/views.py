@@ -123,7 +123,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         
         self.perform_create(serializer)
         instance = serializer.instance
-        
+        # Логування — у perform_create (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
         return Response(
             {
@@ -180,7 +181,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # For full update (PUT), return standard API contract
         return Response(
             {
@@ -238,7 +240,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200
         return Response(
             {

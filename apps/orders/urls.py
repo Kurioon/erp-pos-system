@@ -15,11 +15,16 @@ from .views import (
     OrderRefundView,
     OrderPrepayView,
     OrderReceiptPDFView,
-    ExchangeRateListView,       # Новий імпорт
-    ExchangeRateUpdateView      # Новий імпорт
+    ExchangeRateListView,       
+    ExchangeRateUpdateView,
+    SupplierListCreateView,     
+    SupplierDetailView      
 )
 
 urlpatterns = [
+    # Постачальники
+    path('suppliers/', SupplierListCreateView.as_view(), name='supplier-list'),
+    path('suppliers/<int:pk>/', SupplierDetailView.as_view(), name='supplier-detail'),
     # Каси
     path('cash-registers/', CashRegisterListCreateView.as_view(), name='cashregister-list'),
     path('cash-registers/analytics/', GlobalCashboxAnalyticsView.as_view(), name='cashregister-analytics'),

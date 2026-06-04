@@ -11,6 +11,16 @@ class CashRegister(models.Model):
 
     def __str__(self):
         return self.name
+    
+class Supplier(models.Model):
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
 
 class Order(models.Model):
     STATUS_CHOICES = [
@@ -25,6 +35,14 @@ class Order(models.Model):
         ('retail', 'Retail'),
         ('purchase', 'Purchase'),
     ]
+
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders'
+    )
 
     user = models.ForeignKey(
         'users.CustomUser',

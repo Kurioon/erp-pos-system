@@ -10,9 +10,22 @@ from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
-from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
 from .services import process_refund, process_prepay
+
+
+class SupplierListCreateView(generics.ListCreateAPIView):
+    queryset = Supplier.objects.all()
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class SupplierDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Supplier.objects.all()
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAuthenticated]
+
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
     serializer_class = CashRegisterSerializer

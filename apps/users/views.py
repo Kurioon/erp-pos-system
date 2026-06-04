@@ -20,8 +20,11 @@ class UserMeView(APIView):
         return Response(serializer.data)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
 def health_check(request):
-    """Health-check для Uptime Robot — тримає Render-сервіс «живим». Без авторизації."""
+    """Health-check для Uptime Robot — тримає Render-сервіс «живим». Без авторизації.
+
+    Дозволено GET і HEAD: Uptime Robot за замовчуванням пінгує методом HEAD.
+    """
     return Response({'status': 'ok', 'message': 'ERP Backend is alive!'}, status=200)

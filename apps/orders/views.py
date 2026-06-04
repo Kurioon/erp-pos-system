@@ -10,9 +10,21 @@ from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
-from .models import CashRegister, Order, Transaction, OrderItem
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
-from .services import process_refund, process_prepay
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
+from .services import process_refund, process_prepay, process_cancellation
+
+
+class SupplierListCreateView(generics.ListCreateAPIView):
+    queryset = Supplier.objects.all()
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class SupplierDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Supplier.objects.all()
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
@@ -53,11 +65,17 @@ class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        instance = serializer.save()
+        # Прив'язуємо замовлення до автора, щоб продавець бачив свої замовлення
+        instance = serializer.save(user=self.request.user)
         ActivityLog.log(self.request.user, 'create', instance)
 
     def get_queryset(self):
         queryset = Order.objects.filter(is_archived=False)
+
+        # Продавець бачить лише свої замовлення, адмін — усі
+        request_user = self.request.user
+        if not (hasattr(request_user, 'role') and request_user.role == 'admin'):
+            queryset = queryset.filter(user=request_user)
 
         status_filter = self.request.query_params.get('status')
         if status_filter:
@@ -82,27 +100,16 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if hasattr(user, 'role') and user.role == 'admin':
             return Order.objects.all()
-        return Order.objects.filter(
-            cash_register__in=CashRegister.objects.filter(
-                warehouse__is_archived=False
-            ),
-            user=user
-        )
+        # Продавець має доступ лише до власних замовлень
+        return Order.objects.filter(user=user)
 
     def perform_update(self, serializer):
+        # Редагувати можна лише чернетку; статус змінюється через prepay/refund/cancel
+        if serializer.instance.status != 'draft':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Замовлення можна редагувати тільки зі статусом draft.')
         instance = serializer.save()
         ActivityLog.log(self.request.user, 'update', instance)
-
-    def update(self, request, *args, **kwargs):
-        order = self.get_object()
-
-        if order.status != 'draft':
-            return Response(
-                {'error': 'Замовлення можна редагувати тільки зі статусом draft.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         order = self.get_object()
@@ -118,13 +125,22 @@ class OrderItemListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         order_id = self.kwargs.get('order_id')
-        return OrderItem.objects.filter(order_id=order_id)
+        qs = OrderItem.objects.filter(order_id=order_id)
+        user = self.request.user
+        if not (hasattr(user, 'role') and user.role == 'admin'):
+            qs = qs.filter(order__user=user)
+        return qs
 
     def perform_create(self, serializer):
         order_id = self.kwargs.get('order_id')
         try:
             order = Order.objects.get(pk=order_id)
         except Order.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Замовлення не знайдено.')
+        # Продавець може додавати позиції лише до власних замовлень
+        user = self.request.user
+        if not (hasattr(user, 'role') and user.role == 'admin') and order.user_id != user.id:
             from rest_framework.exceptions import NotFound
             raise NotFound('Замовлення не знайдено.')
         if order.status != 'draft':
@@ -139,7 +155,11 @@ class OrderItemDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         order_id = self.kwargs.get('order_id')
-        return OrderItem.objects.filter(order_id=order_id)
+        qs = OrderItem.objects.filter(order_id=order_id)
+        user = self.request.user
+        if not (hasattr(user, 'role') and user.role == 'admin'):
+            qs = qs.filter(order__user=user)
+        return qs
 
 
 class TransactionListCreateView(generics.ListCreateAPIView):
@@ -176,7 +196,7 @@ class OrderExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="orders.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -214,7 +234,7 @@ class TransactionExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="transactions.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -233,7 +253,7 @@ class TransactionExportCSVView(APIView):
         for t in transactions:
             writer.writerow([
                 t.id,
-                t.order.id,
+                t.order.id if t.order else '', # <--- ФІКС ТУТ: Безпечна перевірка наявності order
                 t.cash_register.name,
                 t.transaction_type,
                 t.amount,
@@ -254,6 +274,11 @@ class OrderExportPDFView(APIView):
         try:
             order = Order.objects.get(pk=pk)
         except Order.DoesNotExist:
+            return Response({'error': 'Замовлення не знайдено'}, status=404)
+
+        # Продавець може отримати PDF лише власних замовлень
+        user = request.user
+        if not (hasattr(user, 'role') and user.role == 'admin') and order.user_id != user.id:
             return Response({'error': 'Замовлення не знайдено'}, status=404)
 
         buffer = io.BytesIO()
@@ -382,6 +407,52 @@ class OrderPrepayView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+class OrderCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'cash_register': {'type': 'integer', 'example': 1},
+                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                },
+                'required': ['cash_register'],
+            }
+        },
+        description='Скасування замовлення (draft/partial → cancelled). Повертає передоплату та товар на склад, якщо була.',
+    )
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        cash_register_id = request.data.get('cash_register')
+        currency = request.data.get('currency', 'UAH')
+
+        if not cash_register_id:
+            return Response({'error': 'Поле cash_register є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            cash_register = CashRegister.objects.get(pk=cash_register_id)
+        except CashRegister.DoesNotExist:
+            return Response({'error': 'Касу не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            t = process_cancellation(order, currency, cash_register, request.user)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.refresh_from_db()
+        return Response({
+            'order_id': order.id,
+            'status': order.status,
+            'transaction_id': t.id if t else None,
+        }, status=status.HTTP_201_CREATED)
+
+
 class OrderReceiptPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -392,6 +463,14 @@ class OrderReceiptPDFView(APIView):
         try:
             order = Order.objects.get(pk=pk, status='paid')
         except Order.DoesNotExist:
+            return Response(
+                {'error': 'Оплачене замовлення не знайдено. Чек доступний лише для статусу paid.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Продавець може отримати чек лише власних замовлень
+        user = request.user
+        if not (hasattr(user, 'role') and user.role == 'admin') and order.user_id != user.id:
             return Response(
                 {'error': 'Оплачене замовлення не знайдено. Чек доступний лише для статусу paid.'},
                 status=status.HTTP_404_NOT_FOUND
@@ -432,9 +511,6 @@ class OrderReceiptPDFView(APIView):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
-
-from .models import ExchangeRate
-from .serializers import ExchangeRateSerializer
 
 # ЗАДАЧА 3 — Ендпоінти курсів валют
 class ExchangeRateListView(generics.ListAPIView):

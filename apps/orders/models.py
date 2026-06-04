@@ -1,4 +1,9 @@
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 
 class CashRegister(models.Model):
     name = models.CharField(max_length=255)
@@ -11,11 +16,20 @@ class CashRegister(models.Model):
 
     def __str__(self):
         return self.name
+    
+class Supplier(models.Model):
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
 
 class Order(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
-        ('pending', 'Pending'),
         ('partial', 'Partially Paid'),
         ('paid', 'Paid'),
         ('returned', 'Returned'),
@@ -25,6 +39,14 @@ class Order(models.Model):
         ('retail', 'Retail'),
         ('purchase', 'Purchase'),
     ]
+
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders'
+    )
 
     user = models.ForeignKey(
         'users.CustomUser',
@@ -50,6 +72,24 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.id} — {self.status}"
+
+    def recalc_total(self):
+        """Перераховує total_amount як суму позицій (лише для чернетки).
+
+        Якщо позицій немає — не чіпаємо введену вручну суму, щоб не зламати
+        сценарій, де total задається без деталізації по OrderItem.
+        """
+        if self.status != 'draft':
+            return
+        agg = self.items.aggregate(
+            total=models.Sum(models.F('quantity') * models.F('price'))
+        )
+        total = agg['total']
+        if total is None:
+            return
+        self.total_amount = total
+        self.balance_due = total - self.prepay_amount
+        self.save(update_fields=['total_amount', 'balance_due', 'updated_at'])
 
 class Transaction(models.Model):
     # ЗАДАЧА 4 — Розширено типи транзакцій
@@ -104,7 +144,7 @@ class OrderItem(models.Model):
         on_delete=models.PROTECT,
         related_name='order_items'
     )
-    quantity = models.PositiveIntegerField()
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     price = models.DecimalField(max_digits=12, decimal_places=2)
 
     def __str__(self):
@@ -121,3 +161,15 @@ class ExchangeRate(models.Model):
 
     def __str__(self):
         return f"{self.currency}: {self.rate_to_uah}"
+
+
+@receiver([post_save, post_delete], sender=OrderItem)
+def _recalc_order_total_on_item_change(sender, instance, **kwargs):
+    """Тримає total_amount замовлення синхронним із сумою позицій.
+
+    filter().first() замість instance.order — щоб не впасти на каскадному
+    видаленні замовлення, коли сам Order вже видалено.
+    """
+    order = Order.objects.filter(pk=instance.order_id).first()
+    if order is not None:
+        order.recalc_total()

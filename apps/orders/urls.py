@@ -14,12 +14,18 @@ from .views import (
     OrderExportPDFView,
     OrderRefundView,
     OrderPrepayView,
+    OrderCancelView,
     OrderReceiptPDFView,
-    ExchangeRateListView,       # Новий імпорт
-    ExchangeRateUpdateView      # Новий імпорт
+    ExchangeRateListView,       
+    ExchangeRateUpdateView,
+    SupplierListCreateView,     
+    SupplierDetailView      
 )
 
 urlpatterns = [
+    # Постачальники
+    path('suppliers/', SupplierListCreateView.as_view(), name='supplier-list'),
+    path('suppliers/<int:pk>/', SupplierDetailView.as_view(), name='supplier-detail'),
     # Каси
     path('cash-registers/', CashRegisterListCreateView.as_view(), name='cashregister-list'),
     path('cash-registers/analytics/', GlobalCashboxAnalyticsView.as_view(), name='cashregister-analytics'),
@@ -36,6 +42,7 @@ urlpatterns = [
     path('orders/<int:pk>/export/pdf/', OrderExportPDFView.as_view(), name='order-export-pdf'),
     path('orders/<int:pk>/refund/', OrderRefundView.as_view(), name='order-refund'),
     path('orders/<int:pk>/prepay/', OrderPrepayView.as_view(), name='order-prepay'),
+    path('orders/<int:pk>/cancel/', OrderCancelView.as_view(), name='order-cancel'),
     path('orders/<int:pk>/receipt/', OrderReceiptPDFView.as_view(), name='order-receipt'),
 
     # Позиції замовлення

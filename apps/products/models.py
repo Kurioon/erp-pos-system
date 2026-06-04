@@ -1,32 +1,48 @@
 from decimal import Decimal
 
 from cloudinary.models import CloudinaryField
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
 class Nomenclature(models.Model):
     # Base fields
-    # code, name, unit_id
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
     unit = models.CharField(max_length=50, default='шт')
     image = CloudinaryField('image', blank=True, null=True)
-    
+
     # Description fields
-    # description, barcode, manufactured
     description = models.TextField(blank=True, null=True)
     barcode = models.CharField(max_length=100, blank=True, null=True, unique=True)
     manufactured = models.CharField(max_length=100, blank=True, null=True)
-    
+
     # Financial fields
-    # purchase_price, sale_price, vat_rate
-    purchase_price = models.DecimalField(max_digits=12, decimal_places=2)
+    purchase_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'), message='Ціна не може бути меншою або дорівнювати 0')]
+    )
     markup_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=20)
-    sale_price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    sale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(Decimal('0.01'), message='Ціна не може бути меншою або дорівнювати 0')]
+    )
+    # Оптова ціна — заповнюється/редагується вручну (без авторозрахунку)
+    wholesale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(Decimal('0.01'), message='Ціна не може бути меншою або дорівнювати 0')]
+    )
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    
+
     # State fields
-    # is_archived, created_at, updated_at
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,24 +55,50 @@ class Nomenclature(models.Model):
     def __str__(self):
         return f'{self.code} - {self.name}'
 
+    def clean(self):
+        if self.purchase_price is not None and self.purchase_price <= Decimal('0.00'):
+            raise ValidationError({'purchase_price': 'Ціна не може бути меншою або дорівнювати 0'})
+        if self.sale_price is not None and self.sale_price <= Decimal('0.00'):
+            raise ValidationError({'sale_price': 'Ціна не може бути меншою або дорівнювати 0'})
+        if self.wholesale_price is not None and self.wholesale_price <= Decimal('0.00'):
+            raise ValidationError({'wholesale_price': 'Ціна не може бути меншою або дорівнювати 0'})
+
     def save(self, *args, **kwargs):
-        if self.purchase_price is not None:
-            # Перераховуємо sale_price якщо:
-            # 1. sale_price ще не встановлений
-            # 2. або purchase_price змінився (порівнюємо з БД)
-            should_recalc = self.sale_price is None or self.sale_price == Decimal('0.00')
+        if self.purchase_price is None or self.purchase_price <= 0:
+            super().save(*args, **kwargs)
+            return
 
-            if not should_recalc and self.pk:
-                try:
-                    old = Nomenclature.objects.get(pk=self.pk)
-                    if old.purchase_price != self.purchase_price or old.markup_percentage != self.markup_percentage:
-                        should_recalc = True
-                except Nomenclature.DoesNotExist:
-                    should_recalc = True
+        if self.pk:
+            try:
+                old = Nomenclature.objects.get(pk=self.pk)
 
-            if should_recalc:
+                if self.sale_price and self.sale_price > 0 and old.sale_price != self.sale_price:
+                    # Адмін вручну змінив sale_price → перераховуємо markup_percentage
+                    self.markup_percentage = (
+                        (self.sale_price / self.purchase_price - Decimal('1.00'))
+                        * Decimal('100.00')
+                    ).quantize(Decimal('0.01'))
+
+                elif (old.purchase_price != self.purchase_price
+                      or old.markup_percentage != self.markup_percentage
+                      or not self.sale_price):
+                    # Змінився purchase_price або markup → перераховуємо sale_price
+                    self.sale_price = (
+                        self.purchase_price
+                        * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))
+                    ).quantize(Decimal('0.01'))
+
+            except Nomenclature.DoesNotExist:
+                # pk є але запису в БД нема — рахуємо sale_price
                 self.sale_price = (
-                    self.purchase_price * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))
+                    self.purchase_price
+                    * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))
                 ).quantize(Decimal('0.01'))
+        else:
+            # Новий товар — завжди рахуємо sale_price з purchase_price і markup
+            self.sale_price = (
+                self.purchase_price
+                * (Decimal('1.00') + self.markup_percentage / Decimal('100.00'))
+            ).quantize(Decimal('0.01'))
 
         super().save(*args, **kwargs)

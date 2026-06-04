@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from users.models import CustomUser
 from products.models import Nomenclature
 from warehouses.models import Warehouse, WarehouseStock
-from orders.models import CashRegister, ExchangeRate
+from orders.models import CashRegister, ExchangeRate, Supplier
 
 
 class Command(BaseCommand):
@@ -65,6 +65,19 @@ class Command(BaseCommand):
         ExchangeRate.objects.get_or_create(currency='EUR', defaults={'rate_to_uah': Decimal('43.2000')})
         self.stdout.write('✓ Курси валют створені')
 
+        # Постачальники
+        suppliers_data = [
+            ('ТОВ «Техно-Опт»', '+380441234567', 'sales@techno-opt.ua', 'м. Київ, вул. Промислова, 5'),
+            ('ФОП Іваненко І.І.', '+380501112233', 'ivanenko@gmail.com', 'м. Львів, вул. Зелена, 12'),
+            ('ТОВ «Глобал Дистрибуція»', '+380322556677', 'info@globaldist.ua', 'м. Харків, пр. Науки, 40'),
+        ]
+        for name, phone, email, address in suppliers_data:
+            Supplier.objects.get_or_create(
+                name=name,
+                defaults={'phone': phone, 'email': email, 'address': address}
+            )
+        self.stdout.write('✓ Постачальники створені')
+
         # Номенклатура
         products_data = [
             ('NB001', 'Ноутбук Lenovo IdeaPad 15', 'шт', '4820001000001', '18000.00', '15.00', '20.00'),
@@ -102,6 +115,11 @@ class Command(BaseCommand):
                     'vat_rate': Decimal(vat),
                 }
             )
+            # Уявна опт-ціна для демо: закупівельна + 10%.
+            # Дозаповнюємо лише якщо ще не задано (ідемпотентність seed).
+            if p.wholesale_price is None:
+                p.wholesale_price = (Decimal(purchase) * Decimal('1.10')).quantize(Decimal('0.01'))
+                p.save()
             created_products.append(p)
 
         self.stdout.write(f'✓ {len(created_products)} товарів створено/знайдено')

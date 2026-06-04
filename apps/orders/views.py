@@ -177,7 +177,9 @@ class TransactionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Transaction.objects.all()
+        # Найновіші транзакції першими — щоб свіжа оплата одразу була зверху
+        # у «Фінансах» (раніше йшли в кінці пагінації й здавалися «зниклими»).
+        queryset = Transaction.objects.all().order_by('-timestamp')
 
         order = self.request.query_params.get('order')
         if order:

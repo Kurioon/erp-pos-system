@@ -10,10 +10,9 @@ from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
-from .models import CashRegister, Order, Transaction, OrderItem
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer
 from .services import process_refund, process_prepay
-
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
     serializer_class = CashRegisterSerializer
@@ -176,7 +175,7 @@ class OrderExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="orders.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -214,7 +213,7 @@ class TransactionExportCSVView(APIView):
     def get(self, request):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="transactions.csv"'
-        response.write('﻿'.encode('utf-8'))
+        response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
         writer.writerow([
@@ -233,7 +232,7 @@ class TransactionExportCSVView(APIView):
         for t in transactions:
             writer.writerow([
                 t.id,
-                t.order.id,
+                t.order.id if t.order else '', # <--- ФІКС ТУТ: Безпечна перевірка наявності order
                 t.cash_register.name,
                 t.transaction_type,
                 t.amount,
@@ -432,9 +431,6 @@ class OrderReceiptPDFView(APIView):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
-
-from .models import ExchangeRate
-from .serializers import ExchangeRateSerializer
 
 # ЗАДАЧА 3 — Ендпоінти курсів валют
 class ExchangeRateListView(generics.ListAPIView):

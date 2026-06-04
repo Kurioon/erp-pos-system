@@ -5,7 +5,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from django.http import HttpResponse
 from django.db import transaction
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -13,9 +13,8 @@ from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
-
-from .models import Warehouse, ServiceJob, WarehouseStock
-from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer
+from .models import Warehouse, ServiceJob, WarehouseStock, StockMovement
+from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer, StockMovementSerializer
 
 
 
@@ -481,3 +480,29 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         low_stocks = self.get_queryset().filter(quantity__lte=2).order_by('quantity')
         serializer = self.get_serializer(low_stocks, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Ендпоінт тільки для читання (історія руху не редагується вручну).
+    Підтримує фільтри: ?warehouse=ID, ?nomenclature=ID, ?reason=STRING, ?date_from=YYYY-MM-DD
+    """
+    serializer_class = StockMovementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = StockMovement.objects.all().order_by('-created_at')
+        params = self.request.query_params
+
+        if warehouse_id := params.get('warehouse'):
+            queryset = queryset.filter(warehouse_id=warehouse_id)
+            
+        if nomenclature_id := params.get('nomenclature'):
+            queryset = queryset.filter(nomenclature_id=nomenclature_id)
+            
+        if reason := params.get('reason'):
+            queryset = queryset.filter(reason=reason)
+            
+        if date_from := params.get('date_from'):
+            queryset = queryset.filter(created_at__gte=date_from)
+
+        return queryset

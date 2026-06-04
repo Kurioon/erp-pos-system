@@ -1,6 +1,5 @@
 from decimal import Decimal
 from rest_framework import serializers
-from django.db.models import Sum, F
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
 
@@ -16,27 +15,19 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         income_types = ('prepay', 'payment', 'sale', 'income')
         expense_types = ('refund', 'return', 'expense')
 
-        # Групуємо по валютах окремо
-        income_by_currency = obj.transactions.filter(
-            transaction_type__in=income_types
-        ).values('currency').annotate(total=Sum('amount'))
+        # Транзакції можуть бути в різних валютах — приводимо все до гривні
+        rates = {er.currency: er.rate_to_uah for er in ExchangeRate.objects.all()}
+        rates['UAH'] = Decimal('1')
 
-        expense_by_currency = obj.transactions.filter(
-            transaction_type__in=expense_types
-        ).values('currency').annotate(total=Sum('amount'))
+        balance = Decimal('0.00')
+        for t in obj.transactions.all():
+            amount_uah = t.amount * rates.get(t.currency, Decimal('1'))
+            if t.transaction_type in income_types:
+                balance += amount_uah
+            elif t.transaction_type in expense_types:
+                balance -= amount_uah
 
-        income_map = {item['currency']: item['total'] for item in income_by_currency}
-        expense_map = {item['currency']: item['total'] for item in expense_by_currency}
-
-        all_currencies = set(income_map.keys()) | set(expense_map.keys())
-
-        balance = {}
-        for currency in all_currencies:
-            income = income_map.get(currency, Decimal('0'))
-            expense = expense_map.get(currency, Decimal('0'))
-            balance[currency] = income - expense
-
-        return balance
+        return balance.quantize(Decimal('0.01'))
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -54,12 +45,22 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = '__all__'
-        # BUG-05 — user read_only
-        read_only_fields = ['balance_due', 'status', 'user', 'total_amount']
+        # user проставляється автоматично з request (автор замовлення)
+        read_only_fields = ['balance_due', 'status', 'user']
+
+    def get_supplier_name(self, obj):
+        # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)
+        return obj.supplier.name if obj.supplier else None
+
+    def validate_total_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Загальна сума повинна бути більше нуля.')
+        return value
 
     def validate_prepay_amount(self, value):
         if value < 0:
@@ -105,6 +106,18 @@ class TransactionSerializer(serializers.ModelSerializer):
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError('Сума транзакції повинна бути більше нуля.')
+        return value
+
+    def validate_transaction_type(self, value):
+        # Прямо через API дозволені лише касові операції внесення/видачі.
+        # prepay/payment/sale/refund/return формуються автоматично сервісами
+        # замовлень (prepay/refund/cancel), щоб не накручувати баланс каси.
+        allowed = ('income', 'expense')
+        if value not in allowed:
+            raise serializers.ValidationError(
+                "Прямо створювати можна лише 'income' (внесення) або 'expense' (видача). "
+                "Решта типів формуються через операції із замовленням."
+            )
         return value
 
     def create(self, validated_data):

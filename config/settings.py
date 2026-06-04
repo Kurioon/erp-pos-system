@@ -213,8 +213,11 @@ STORAGES = {
     },
 }
 
-# Заглушка (Workaround) для застарілої бібліотеки django-cloudinary-storage, 
-# щоб вона не викидала AttributeError під час збірки Docker:
+# НЕ ВИДАЛЯТИ: django-cloudinary-storage у власній команді collectstatic
+# (cloudinary_storage/management/commands/collectstatic.py:27) читає
+# settings.STATICFILES_STORAGE напряму. На Django 6 цей ключ застарілий і не має
+# дефолту, тож без нього collectstatic у build.sh впаде з AttributeError.
+# Дублює STORAGES["staticfiles"], доки бібліотека не почне читати STORAGES.
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = '/media/'

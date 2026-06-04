@@ -1,13 +1,25 @@
 from django.urls import path
 from .views import (
-    CashRegisterListCreateView, CashRegisterDetailView, GlobalCashboxAnalyticsView,
-    OrderListCreateView, OrderDetailView,
-    OrderItemListCreateView, OrderItemDetailView,
-    TransactionListCreateView, TransactionDetailView,
-    OrderExportCSVView, TransactionExportCSVView, OrderExportPDFView,
-    OrderRefundView, OrderPrepayView, OrderReceiptPDFView, OrderCancelView,
-    ExchangeRateListView, ExchangeRateUpdateView,
-    SupplierListCreateView, SupplierDetailView,
+    CashRegisterListCreateView,
+    CashRegisterDetailView,
+    GlobalCashboxAnalyticsView,
+    OrderListCreateView,
+    OrderDetailView,
+    OrderItemListCreateView,
+    OrderItemDetailView,
+    TransactionListCreateView,
+    TransactionDetailView,
+    OrderExportCSVView,
+    TransactionExportCSVView,
+    OrderExportPDFView,
+    OrderRefundView,
+    OrderPrepayView,
+    OrderCancelView,
+    OrderReceiptPDFView,
+    ExchangeRateListView,       
+    ExchangeRateUpdateView,
+    SupplierListCreateView,     
+    SupplierDetailView      
 )
 
 urlpatterns = [

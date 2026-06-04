@@ -106,7 +106,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         reader = csv.DictReader(io.StringIO(decoded), delimiter=';')
 
         REQUIRED = {'code', 'name', 'purchase_price'}
-        if not reader.fieldnames or not REQUIRED.issubset(set(reader.fieldnames)):
+        columns = set(reader.fieldnames or [])
+        if not reader.fieldnames or not REQUIRED.issubset(columns):
             return Response(
                 {'error': 'CSV має містити обов\'язкові колонки: ' + ', '.join(REQUIRED)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -134,26 +135,44 @@ class ProductViewSet(viewsets.ModelViewSet):
                 errors.append({'row': row_num, 'error': f'Некоректна ціна: "{purchase_price_raw}".'})
                 continue
 
-            try:
-                markup = Decimal(row.get('markup_percentage', '20').strip() or '20')
-            except InvalidOperation:
-                markup = Decimal('20')
-
-            try:
-                vat = Decimal(row.get('vat_rate', '0').strip() or '0')
-            except InvalidOperation:
-                vat = Decimal('0')
-
-            valid_rows.append({
+            # Опційні поля включаємо лише якщо їх колонка реально присутня в CSV,
+            # щоб при оновленні не затирати наявні значення дефолтами (BUG-09).
+            fields = {
                 'code': code,
                 'name': name,
-                'unit': row.get('unit', 'шт').strip() or 'шт',
-                'barcode': row.get('barcode', '').strip() or None,
                 'purchase_price': purchase_price,
-                'markup_percentage': markup,
-                'vat_rate': vat,
-                'description': row.get('description', '').strip() or '',
-            })
+            }
+
+            if 'unit' in columns:
+                unit = row.get('unit', '').strip()
+                if unit:
+                    fields['unit'] = unit
+
+            if 'barcode' in columns:
+                fields['barcode'] = row.get('barcode', '').strip() or None
+
+            if 'markup_percentage' in columns:
+                markup_raw = row.get('markup_percentage', '').strip()
+                if markup_raw:
+                    try:
+                        fields['markup_percentage'] = Decimal(markup_raw)
+                    except InvalidOperation:
+                        errors.append({'row': row_num, 'error': f'Некоректна націнка: "{markup_raw}".'})
+                        continue
+
+            if 'vat_rate' in columns:
+                vat_raw = row.get('vat_rate', '').strip()
+                if vat_raw:
+                    try:
+                        fields['vat_rate'] = Decimal(vat_raw)
+                    except InvalidOperation:
+                        errors.append({'row': row_num, 'error': f'Некоректний ПДВ: "{vat_raw}".'})
+                        continue
+
+            if 'description' in columns:
+                fields['description'] = row.get('description', '').strip()
+
+            valid_rows.append(fields)
 
         if errors:
             return Response({'status': 'error', 'errors': errors},
@@ -165,22 +184,27 @@ class ProductViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 for data in valid_rows:
-                    barcode = data.pop('barcode')
-                    obj, created = Nomenclature.objects.get_or_create(
-                        code=data['code'],
-                        defaults={**data, 'barcode': barcode}
-                    )
-                    if not created:
+                    obj = Nomenclature.objects.filter(code=data['code']).first()
+                    if obj is None:
+                        # Новий товар — дефолти для полів, відсутніх у CSV
+                        create_data = {
+                            'unit': 'шт',
+                            'markup_percentage': Decimal('20'),
+                            'vat_rate': Decimal('0'),
+                            'description': '',
+                            'barcode': None,
+                            **data,
+                        }
+                        obj = Nomenclature.objects.create(**create_data)
+                        created_count += 1
+                        ActivityLog.log(request.user, 'create', obj)
+                    else:
+                        # Оновлення — змінюємо лише поля, явно передані в CSV
                         for field, value in data.items():
                             setattr(obj, field, value)
-                        if barcode:
-                            obj.barcode = barcode
                         obj.save()
                         updated_count += 1
                         ActivityLog.log(request.user, 'update', obj)
-                    else:
-                        created_count += 1
-                        ActivityLog.log(request.user, 'create', obj)
         except Exception as e:
             return Response({'error': f'Помилка бази даних: {str(e)}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)

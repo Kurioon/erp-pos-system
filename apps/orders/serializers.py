@@ -2,8 +2,9 @@ from decimal import Decimal
 from rest_framework import serializers
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
+
 class CashRegisterSerializer(serializers.ModelSerializer):
-    # ЗАДАЧА 5 — Динамічний баланс
+    # BUG-02 — баланс окремо по валютах
     balance = serializers.SerializerMethodField()
 
     class Meta:
@@ -29,7 +30,6 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         return balance.quantize(Decimal('0.01'))
 
 
-# БАГ 3 — Серіалізатор постачальників
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
@@ -72,7 +72,6 @@ class OrderSerializer(serializers.ModelSerializer):
         total = data.get('total_amount', instance.total_amount if instance else Decimal('0'))
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
 
-        # БАГ 3 — Валідація постачальника
         order_type = data.get('order_type', instance.order_type if instance else None)
         supplier = data.get('supplier', instance.supplier if instance else None)
 
@@ -86,7 +85,6 @@ class OrderSerializer(serializers.ModelSerializer):
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
             )
 
-        # БАГ 1 (вже був пофікшений тобою)
         if not instance and prepay > 0:
             raise serializers.ValidationError(
                 {'prepay_amount': 'При створенні замовлення передоплата має бути 0. Використовуйте POST /api/orders/{id}/prepay/'}
@@ -97,6 +95,43 @@ class OrderSerializer(serializers.ModelSerializer):
             data['status'] = 'draft'
 
         return data
+
+    # ------------------------------------------------------------------
+    # НОВИЙ МЕТОД: Обробка збереження товарів при створенні замовлення
+    # ------------------------------------------------------------------
+    def create(self, validated_data):
+        # 1. Отримуємо масив 'items' напряму з сирих даних запиту
+        items_data = self.initial_data.get('items', [])
+        
+        # 2. Створюємо саме замовлення
+        order = super().create(validated_data)
+        
+        # 3. Імпортуємо модель Nomenclature локально для отримання ціни
+        from products.models import Nomenclature 
+        
+        # 4. Створюємо позиції замовлення (OrderItem)
+        for item in items_data:
+            product_id = item.get('product')
+            quantity = item.get('quantity')
+            
+            if product_id and quantity:
+                try:
+                    product = Nomenclature.objects.get(pk=product_id)
+                    # Визначаємо ціну: роздрібна чи закупівельна залежно від типу замовлення
+                    price = product.sale_price if order.order_type == 'retail' else product.purchase_price
+                    
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        quantity=quantity,
+                        price=price
+                    )
+                except Nomenclature.DoesNotExist:
+                    # Якщо товар з таким ID раптом не знайдено, просто пропускаємо
+                    pass
+                
+        return order
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -127,7 +162,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             validated_data['user'] = request.user
         return super().create(validated_data)
 
-# ЗАДАЧА 3 — Серіалізатор курсів
+
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate

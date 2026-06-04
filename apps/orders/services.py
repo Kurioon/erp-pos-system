@@ -71,7 +71,6 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     else:
         order.status = 'partial'
 
-    # Списуємо товар тільки при першій оплаті (draft → partial/paid)
     if is_first_payment:
         _deduct_order_items(order)
 
@@ -132,21 +131,43 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
 
 def _deduct_order_items(order: Order):
     for item in order.items.all():
-        remove_stock(
-            warehouse=order.cash_register.warehouse,
-            nomenclature=item.product,
-            quantity=item.quantity,
-            reason='sale',
-            order=order,
-        )
+        if order.order_type == 'retail':
+            # Для продажу клієнту — списуємо товар
+            remove_stock(
+                warehouse=order.cash_register.warehouse,
+                nomenclature=item.product,
+                quantity=item.quantity,
+                reason='sale',
+                order=order,
+            )
+        elif order.order_type == 'purchase':
+            # Для закупівлі у постачальника — ДОДАЄМО товар на склад
+            add_stock(
+                warehouse=order.cash_register.warehouse,
+                nomenclature=item.product,
+                quantity=item.quantity,
+                reason='purchase',
+                order=order,
+            )
 
 
 def _return_order_items(order: Order):
     for item in order.items.all():
-        add_stock(
-            warehouse=order.cash_register.warehouse,
-            nomenclature=item.product,
-            quantity=item.quantity,
-            reason='return',
-            order=order,
-        )
+        if order.order_type == 'retail':
+            # Клієнт повернув товар — додаємо назад на склад
+            add_stock(
+                warehouse=order.cash_register.warehouse,
+                nomenclature=item.product,
+                quantity=item.quantity,
+                reason='return',
+                order=order,
+            )
+        elif order.order_type == 'purchase':
+            # Повернення браку постачальнику — списуємо зі складу
+            remove_stock(
+                warehouse=order.cash_register.warehouse,
+                nomenclature=item.product,
+                quantity=item.quantity,
+                reason='return_to_supplier',
+                order=order,
+            )

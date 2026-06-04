@@ -15,6 +15,8 @@ from activity_log.models import ActivityLog
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from .models import Warehouse, ServiceJob, WarehouseStock, StockMovement
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer, StockMovementSerializer
+# helper services for stock operations
+from .services import add_stock, remove_stock
 
 
 
@@ -121,8 +123,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         
         self.perform_create(serializer)
         instance = serializer.instance
-        ActivityLog.log(self.request.user, 'create', instance)
-        
+        # Логування — у perform_create (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
         return Response(
             {
@@ -179,8 +181,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # For full update (PUT), return standard API contract
         return Response(
             {
@@ -238,8 +240,8 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
-        
+        # Логування — у perform_update (щоб не дублювати запис у журналі)
+
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200
         return Response(
             {
@@ -406,7 +408,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
             return Response({"error": "Формат файлу має бути CSV."}, 
                             status=status.HTTP_400_BAD_REQUEST)
 
-        decoded_file = file.read().decode('utf-8')
+        decoded_file = file.read().decode('utf-8-sig')  # utf-8-sig знімає BOM, якщо є
         io_string = io.StringIO(decoded_file)
         reader = csv.reader(io_string, delimiter=';') 
         
@@ -480,6 +482,76 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         low_stocks = self.get_queryset().filter(quantity__lte=2).order_by('quantity')
         serializer = self.get_serializer(low_stocks, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['post'], url_path='move', permission_classes=[IsAuthenticated])
+    @transaction.atomic
+    def move_stock(self, request, pk=None):
+        """Переміщення товару з одного складу на інший.
+        URL: POST /api/warehouse-stocks/{stock_id}/move/
+        Payload: {"quantity": int, "destination_warehouse_id": int}
+        """
+        try:
+            # 1. Отримуємо поточний запис залишку (звідки забираємо)
+            source_stock = self.get_object()
+            
+            # 2. Отримуємо дані з фронтенду
+            quantity = int(request.data.get('quantity', 0))
+            destination_warehouse_id = request.data.get('destination_warehouse_id')
+
+            # 3. Базові перевірки
+            if quantity <= 0:
+                return Response({"detail": "Кількість має бути більшою за нуль."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not destination_warehouse_id:
+                return Response({"detail": "Потрібно передати destination_warehouse_id."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if source_stock.quantity < quantity:
+                return Response({"detail": f"Недостатньо товару. В наявності: {source_stock.quantity} шт."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 4. Перевіримо, чи існує целевой склад
+            try:
+                destination_warehouse = Warehouse.objects.get(id=destination_warehouse_id, is_archived=False)
+            except Warehouse.DoesNotExist:
+                return Response({"detail": "Склад-призначення не знайдено."}, status=status.HTTP_404_NOT_FOUND)
+
+            # 5. Перевіримо, чи це не той же склад
+            if source_stock.warehouse.id == destination_warehouse_id:
+                return Response({"detail": "Складність праці: вибирайте інший склад."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 6. Виконуємо переміщення через готові сервіси
+            # Списуємо зі старого складу
+            remove_stock(
+                warehouse=source_stock.warehouse,
+                nomenclature=source_stock.nomenclature,
+                quantity=quantity,
+                reason='move_out',
+                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+            )
+            
+            # Додаємо на новий склад
+            add_stock(
+                warehouse=destination_warehouse,
+                nomenclature=source_stock.nomenclature,
+                quantity=quantity,
+                reason='move_in',
+                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+            )
+            
+            ActivityLog.log(self.request.user, 'update', source_stock, 
+                          changes={"action": "move", "quantity_moved": quantity, 
+                                   "from": source_stock.warehouse.name, 
+                                   "to": destination_warehouse.name})
+
+            return Response({
+                "detail": "Товар успішно переміщено.",
+                "stock_id": source_stock.id,
+                "quantity_moved": quantity
+            }, status=status.HTTP_200_OK)
+            
+        except (ValueError, TypeError) as e:
+            return Response({"detail": f"Помилка обробки даних: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": f"Помилка сервера: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     """

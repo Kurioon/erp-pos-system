@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.db import transaction
-from .models import Order, Transaction
+from .models import Order, Transaction, ExchangeRate
 from warehouses.services import add_stock, remove_stock
 
 
@@ -21,6 +21,21 @@ def _validate_transition(order: Order, new_status: str):
         )
 
 
+def _to_uah(amount: Decimal, currency: str) -> Decimal:
+    """Конвертує суму у гривні за поточним курсом ExchangeRate.
+
+    Облік замовлень (total_amount, prepay_amount, balance_due) ведеться в UAH,
+    тому будь-яку оплату в іншій валюті треба привести до гривні.
+    """
+    if not currency or currency == 'UAH':
+        return amount
+    try:
+        rate = ExchangeRate.objects.get(currency=currency).rate_to_uah
+    except ExchangeRate.DoesNotExist:
+        raise ValueError(f"Немає курсу для валюти '{currency}'. Спершу оновіть курси валют.")
+    return (amount * rate).quantize(Decimal('0.01'))
+
+
 @transaction.atomic
 def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
     if order.status not in ('draft', 'partial'):
@@ -29,11 +44,15 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     if amount <= 0:
         raise ValueError('Сума оплати має бути більшою за нуль.')
 
-    if amount > order.balance_due:
-        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due}.')
+    # Сума оплати може бути в USD/EUR — приводимо до гривні для обліку боргу
+    amount_uah = _to_uah(amount, currency)
+
+    if amount_uah > order.balance_due:
+        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due} грн.')
 
     is_first_payment = order.status == 'draft'
 
+    # Transaction зберігає фактичну валюту та суму оплати (як пройшло через касу)
     t = Transaction.objects.create(
         order=order,
         cash_register=cash_register,
@@ -43,7 +62,7 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         transaction_type='prepay',
     )
 
-    order.prepay_amount += amount
+    order.prepay_amount += amount_uah
     order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:
@@ -61,42 +80,19 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
 
 
 @transaction.atomic
-def process_payment(order: Order, amount: Decimal, currency: str, cash_register, user) -> Transaction:
-    _validate_transition(order, 'paid')
-
-    t = Transaction.objects.create(
-        order=order,
-        cash_register=cash_register,
-        user=user,
-        amount=amount,
-        currency=currency,
-        transaction_type='payment',
-    )
-
-    order.prepay_amount += amount
-    order.balance_due = order.total_amount - order.prepay_amount
-
-    if order.balance_due <= 0:
-        order.balance_due = Decimal('0.00')
-        order.status = 'paid'
-
-    order.save()
-    return t
-
-
-@transaction.atomic
 def process_cancellation(order: Order, currency: str, cash_register, user):
     _validate_transition(order, 'cancelled')
 
     t = None
 
     if order.prepay_amount > 0:
+        # prepay_amount накопичено в гривні, тому повернення фіксуємо в UAH
         t = Transaction.objects.create(
             order=order,
             cash_register=cash_register,
             user=user,
             amount=order.prepay_amount,
-            currency=currency,
+            currency='UAH',
             transaction_type='refund',
         )
         _return_order_items(order)
@@ -113,12 +109,14 @@ def process_cancellation(order: Order, currency: str, cash_register, user):
 def process_refund(order: Order, currency: str, cash_register, user) -> Transaction:
     _validate_transition(order, 'returned')
 
+    # prepay_amount накопичено в гривні, тому повернення фіксуємо в UAH
+    # (параметр currency лишено для сумісності виклику з view).
     t = Transaction.objects.create(
         order=order,
         cash_register=cash_register,
         user=user,
         amount=order.prepay_amount,
-        currency=currency,
+        currency='UAH',
         transaction_type='refund',
     )
 
@@ -134,9 +132,21 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
 
 def _deduct_order_items(order: Order):
     for item in order.items.all():
-        remove_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)
+        remove_stock(
+            warehouse=order.cash_register.warehouse,
+            nomenclature=item.product,
+            quantity=item.quantity,
+            reason='sale',
+            order=order,
+        )
 
 
 def _return_order_items(order: Order):
     for item in order.items.all():
-        add_stock(warehouse=order.cash_register.warehouse, nomenclature=item.product, quantity=item.quantity)
+        add_stock(
+            warehouse=order.cash_register.warehouse,
+            nomenclature=item.product,
+            quantity=item.quantity,
+            reason='return',
+            order=order,
+        )

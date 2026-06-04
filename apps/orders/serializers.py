@@ -45,12 +45,17 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = '__all__'
         # user проставляється автоматично з request (автор замовлення)
         read_only_fields = ['balance_due', 'status', 'user']
+
+    def get_supplier_name(self, obj):
+        # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)
+        return obj.supplier.name if obj.supplier else None
 
     def validate_total_amount(self, value):
         if value <= 0:

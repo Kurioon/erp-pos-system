@@ -121,7 +121,6 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         
         self.perform_create(serializer)
         instance = serializer.instance
-        ActivityLog.log(self.request.user, 'create', instance)
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status } з HTTP 201
         return Response(
@@ -179,7 +178,6 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
         
         # For full update (PUT), return standard API contract
         return Response(
@@ -238,7 +236,6 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
             )
         
         self.perform_update(serializer)
-        ActivityLog.log(self.request.user, 'update', instance)
         
         # Повертаємо відповідь згідно з контрактом: { job_id, status, updated_at } з HTTP 200
         return Response(
@@ -252,17 +249,15 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Override destroy to implement soft delete.
-        Instead of deleting, set is_archived=True and save.
+        Override destroy to delegate soft delete to perform_destroy.
         Returns HTTP 204 NO CONTENT on success.
         """
         instance = self.get_object()
-        instance.is_archived = True
-        instance.save()
-        ActivityLog.log(self.request.user, 'delete', instance)
+        
+        # Передаємо логіку видалення та логування вниз, у perform_destroy
+        self.perform_destroy(instance)
+        
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-    # --- НОВІ ЕНДПОІНТИ ---
 
     @action(detail=False, methods=['get'], url_path='export/csv', permission_classes=[IsAuthenticated])
     def export_csv(self, request):
@@ -406,7 +401,7 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
             return Response({"error": "Формат файлу має бути CSV."}, 
                             status=status.HTTP_400_BAD_REQUEST)
 
-        decoded_file = file.read().decode('utf-8')
+        decoded_file = file.read().decode('utf-8-sig')
         io_string = io.StringIO(decoded_file)
         reader = csv.reader(io_string, delimiter=';') 
         

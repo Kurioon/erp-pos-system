@@ -38,27 +38,30 @@ class Command(BaseCommand):
         else:
             self.stdout.write('– Продавець вже існує')
 
-        # Склади
-        wh1, _ = Warehouse.objects.get_or_create(
-            name='Магазин №1',
-            defaults={'address': 'вул. Хрещатик, 1'}
-        )
-        wh2, _ = Warehouse.objects.get_or_create(
-            name='Магазин №2',
-            defaults={'address': 'вул. Василя Стуса, 22'}
-        )
+        # Склади (стійко до можливих дублів назв: беремо перший не-архівний)
+        def ensure_warehouse(name, address):
+            wh = Warehouse.objects.filter(name=name, is_archived=False).first()
+            if wh is None:
+                wh = Warehouse.objects.create(name=name, address=address)
+            return wh
+
+        wh1 = ensure_warehouse('Магазин №1', 'вул. Хрещатик, 1')
+        wh2 = ensure_warehouse('Магазин №2', 'вул. Василя Стуса, 22')
         self.stdout.write('✓ Склади створені')
 
-        # Каси
-        CashRegister.objects.get_or_create(
-            name='Каса Магазин №1',
-            defaults={'warehouse': wh1}
-        )
-        CashRegister.objects.get_or_create(
-            name='Каса Магазин №2',
-            defaults={'warehouse': wh2}
-        )
-        self.stdout.write('✓ Каси створені')
+        # Каси — гарантуємо правильну прив'язку до складу навіть для вже наявних кас
+        def ensure_cash(name, wh):
+            cash = CashRegister.objects.filter(name=name).first()
+            if cash is None:
+                cash = CashRegister.objects.create(name=name, warehouse=wh)
+            elif cash.warehouse_id != wh.id:
+                cash.warehouse = wh
+                cash.save()
+            return cash
+
+        ensure_cash('Каса Магазин №1', wh1)
+        ensure_cash('Каса Магазин №2', wh2)
+        self.stdout.write('✓ Каси створені та прив\'язані до правильних складів')
 
         # Курси валют
         ExchangeRate.objects.get_or_create(currency='USD', defaults={'rate_to_uah': Decimal('40.5000')})
@@ -124,22 +127,17 @@ class Command(BaseCommand):
 
         self.stdout.write(f'✓ {len(created_products)} товарів створено/знайдено')
 
-        # Залишки
-        stock_data = [
-            (wh1, 0, 5), (wh1, 1, 3), (wh1, 2, 8), (wh1, 3, 20), (wh1, 4, 15),
-            (wh1, 5, 10), (wh1, 6, 12), (wh1, 7, 25), (wh1, 8, 30), (wh1, 9, 7),
-            (wh2, 10, 4), (wh2, 11, 2), (wh2, 12, 3), (wh2, 13, 6), (wh2, 14, 8),
-            (wh2, 15, 50), (wh2, 16, 15), (wh2, 17, 20), (wh2, 18, 10), (wh2, 19, 5),
-        ]
+        # Залишки — КОЖЕН товар кладемо на ОБИДВА склади,
+        # щоб продаж/повернення можна було тестувати на будь-якій касі.
+        for p in created_products:
+            for wh in (wh1, wh2):
+                WarehouseStock.objects.get_or_create(
+                    warehouse=wh,
+                    nomenclature=p,
+                    defaults={'quantity': 20}
+                )
 
-        for wh, idx, qty in stock_data:
-            WarehouseStock.objects.get_or_create(
-                warehouse=wh,
-                nomenclature=created_products[idx],
-                defaults={'quantity': qty}
-            )
-
-        self.stdout.write('✓ Залишки заповнені')
+        self.stdout.write('✓ Залишки заповнені (усі товари на обох складах по 20 шт)')
         self.stdout.write('')
         self.stdout.write('=== Seed завершено ===')
         self.stdout.write('admin@erp.com / admin123')

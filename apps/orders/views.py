@@ -6,13 +6,17 @@ from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema, OpenApiExample
-from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
 from .services import process_refund, process_prepay, process_cancellation
+
+
+# Типи транзакцій які продавець НЕ може створювати вручну
+ADMIN_ONLY_TRANSACTION_TYPES = ('income', 'expense')
+SYSTEM_ONLY_TRANSACTION_TYPES = ('prepay', 'payment', 'refund', 'sale', 'return')
 
 
 class SupplierListCreateView(generics.ListCreateAPIView):
@@ -64,13 +68,19 @@ class OrderListCreateView(generics.ListCreateAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
+    # BUG-05 — зберігаємо user при створенні
     def perform_create(self, serializer):
         # Прив'язуємо замовлення до автора, щоб продавець бачив свої замовлення
         instance = serializer.save(user=self.request.user)
         ActivityLog.log(self.request.user, 'create', instance)
 
     def get_queryset(self):
-        queryset = Order.objects.filter(is_archived=False)
+        user = self.request.user
+        # BUG-11 — однакова фільтрація для списку і деталей
+        if hasattr(user, 'role') and user.role == 'admin':
+            queryset = Order.objects.filter(is_archived=False)
+        else:
+            queryset = Order.objects.filter(is_archived=False, user=user)
 
         # Продавець бачить лише свої замовлення, адмін — усі
         request_user = self.request.user
@@ -85,9 +95,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if cash_register:
             queryset = queryset.filter(cash_register_id=cash_register)
 
-        user = self.request.query_params.get('user')
-        if user:
-            queryset = queryset.filter(user_id=user)
+        user_filter = self.request.query_params.get('user')
+        if user_filter:
+            queryset = queryset.filter(user_id=user_filter)
 
         return queryset
 
@@ -183,6 +193,24 @@ class TransactionListCreateView(generics.ListCreateAPIView):
 
         return queryset
 
+    # BUG-03 — обмеження на створення транзакцій
+    def perform_create(self, serializer):
+        user = self.request.user
+        transaction_type = serializer.validated_data.get('transaction_type')
+
+        if transaction_type in SYSTEM_ONLY_TRANSACTION_TYPES:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                f'Тип транзакції {transaction_type} створюється автоматично через відповідний ендпоінт.'
+            )
+
+        if transaction_type in ADMIN_ONLY_TRANSACTION_TYPES:
+            if not (hasattr(user, 'role') and user.role == 'admin'):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Тільки адміністратор може створювати транзакції типу income/expense.')
+
+        serializer.save(user=user)
+
 
 class TransactionDetailView(generics.RetrieveAPIView):
     queryset = Transaction.objects.all()
@@ -204,7 +232,11 @@ class OrderExportCSVView(APIView):
             'Борг', 'Коментар/ТТН', 'Дата створення'
         ])
 
-        orders = Order.objects.filter(is_archived=False)
+        user = request.user
+        if hasattr(user, 'role') and user.role == 'admin':
+            orders = Order.objects.filter(is_archived=False)
+        else:
+            orders = Order.objects.filter(is_archived=False, user=user)
 
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
@@ -215,13 +247,9 @@ class OrderExportCSVView(APIView):
 
         for order in orders:
             writer.writerow([
-                order.id,
-                order.status,
-                order.order_type,
-                order.total_amount,
-                order.prepay_amount,
-                order.balance_due,
-                order.comment_ttn,
+                order.id, order.status, order.order_type,
+                order.total_amount, order.prepay_amount,
+                order.balance_due, order.comment_ttn,
                 order.created_at.strftime('%Y-%m-%d %H:%M'),
             ])
 
@@ -237,9 +265,7 @@ class TransactionExportCSVView(APIView):
         response.write('\ufeff'.encode('utf-8'))
 
         writer = csv.writer(response, delimiter=';')
-        writer.writerow([
-            'ID', 'Замовлення', 'Каса', 'Тип', 'Сума', 'Валюта', 'Дата'
-        ])
+        writer.writerow(['ID', 'Замовлення', 'Каса', 'Тип', 'Сума', 'Валюта', 'Дата'])
 
         transactions = Transaction.objects.all()
 
@@ -253,7 +279,7 @@ class TransactionExportCSVView(APIView):
         for t in transactions:
             writer.writerow([
                 t.id,
-                t.order.id if t.order else '', # <--- ФІКС ТУТ: Безпечна перевірка наявності order
+                t.order.id if t.order else '',
                 t.cash_register.name,
                 t.transaction_type,
                 t.amount,
@@ -271,8 +297,13 @@ class OrderExportPDFView(APIView):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
 
+        # BUG-07 — перевірка власника
+        user = request.user
         try:
-            order = Order.objects.get(pk=pk)
+            if hasattr(user, 'role') and user.role == 'admin':
+                order = Order.objects.get(pk=pk)
+            else:
+                order = Order.objects.get(pk=pk, user=user)
         except Order.DoesNotExist:
             return Response({'error': 'Замовлення не знайдено'}, status=404)
 
@@ -286,7 +317,6 @@ class OrderExportPDFView(APIView):
 
         p.setFont('Helvetica-Bold', 16)
         p.drawString(50, 800, f'Order #{order.id}')
-
         p.setFont('Helvetica', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
@@ -298,8 +328,8 @@ class OrderExportPDFView(APIView):
 
         p.showPage()
         p.save()
-
         buffer.seek(0)
+
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="order_{order.id}.pdf"'
         return response
@@ -308,19 +338,6 @@ class OrderExportPDFView(APIView):
 class OrderRefundView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        request={
-            'application/json': {
-                'type': 'object',
-                'properties': {
-                    'cash_register': {'type': 'integer', 'example': 1},
-                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
-                },
-                'required': ['cash_register'],
-            }
-        },
-        description='Повернення оплаченого замовлення. Статус: paid → returned.',
-    )
     def post(self, request, pk):
         try:
             order = Order.objects.get(pk=pk)
@@ -354,19 +371,20 @@ class OrderRefundView(APIView):
 class OrderPrepayView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # Додаємо схему для Swagger, щоб з'явилося поле Request body
     @extend_schema(
         request={
             'application/json': {
                 'type': 'object',
                 'properties': {
                     'amount': {'type': 'string', 'example': '500.00'},
-                    'cash_register': {'type': 'integer', 'example': 1},
-                    'currency': {'type': 'string', 'example': 'UAH', 'enum': ['UAH', 'USD', 'EUR']},
+                    'currency': {'type': 'string', 'example': 'UAH'},
+                    'cash_register': {'type': 'integer', 'example': 2},
                 },
                 'required': ['amount', 'cash_register'],
             }
         },
-        description='Передоплата замовлення. Статус: draft → partial або paid залежно від суми.',
+        description='Оплата або передоплата замовлення',
     )
     def post(self, request, pk):
         try:
@@ -399,6 +417,7 @@ class OrderPrepayView(APIView):
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        order.refresh_from_db()
         return Response({
             'order_id': order.id,
             'status': order.status,
@@ -460,11 +479,16 @@ class OrderReceiptPDFView(APIView):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
 
+        # BUG-07 — перевірка власника
+        user = request.user
         try:
-            order = Order.objects.get(pk=pk, status='paid')
+            if hasattr(user, 'role') and user.role == 'admin':
+                order = Order.objects.get(pk=pk, status='paid')
+            else:
+                order = Order.objects.get(pk=pk, status='paid', user=user)
         except Order.DoesNotExist:
             return Response(
-                {'error': 'Оплачене замовлення не знайдено. Чек доступний лише для статусу paid.'},
+                {'error': 'Оплачене замовлення не знайдено або доступ заборонено.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -481,7 +505,6 @@ class OrderReceiptPDFView(APIView):
 
         p.setFont('Helvetica-Bold', 16)
         p.drawString(50, 800, f'Receipt — Order #{order.id}')
-
         p.setFont('Helvetica', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
@@ -506,26 +529,24 @@ class OrderReceiptPDFView(APIView):
 
         p.showPage()
         p.save()
-
         buffer.seek(0)
+
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="receipt_{order.id}.pdf"'
         return response
 
-# ЗАДАЧА 3 — Ендпоінти курсів валют
+
 class ExchangeRateListView(generics.ListAPIView):
-    """ GET /api/exchange-rates/ — всі курси (доступно всім авторизованим) """
     queryset = ExchangeRate.objects.all()
     serializer_class = ExchangeRateSerializer
     permission_classes = [IsAuthenticated]
 
+
 class ExchangeRateUpdateView(generics.RetrieveUpdateAPIView):
-    """ PUT /api/exchange-rates/{currency}/ — оновити курс (тільки адмін) """
     queryset = ExchangeRate.objects.all()
     serializer_class = ExchangeRateSerializer
     permission_classes = [IsAdminRole]
-    lookup_field = 'currency' # Дозволяє шукати по 'USD' замість ID
+    lookup_field = 'currency'
 
     def perform_update(self, serializer):
-        # Записуємо, хто саме оновив курс
         serializer.save(updated_by=self.request.user)

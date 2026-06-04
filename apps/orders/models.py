@@ -16,7 +16,8 @@ class CashRegister(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
 class Supplier(models.Model):
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=50, blank=True)
@@ -26,6 +27,7 @@ class Supplier(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Order(models.Model):
     STATUS_CHOICES = [
@@ -47,7 +49,6 @@ class Order(models.Model):
         blank=True,
         related_name='orders'
     )
-
     user = models.ForeignKey(
         'users.CustomUser',
         on_delete=models.SET_NULL,
@@ -62,7 +63,7 @@ class Order(models.Model):
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     prepay_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     comment_ttn = models.TextField(blank=True)
@@ -92,7 +93,6 @@ class Order(models.Model):
         self.save(update_fields=['total_amount', 'balance_due', 'updated_at'])
 
 class Transaction(models.Model):
-    # ЗАДАЧА 4 — Розширено типи транзакцій
     TRANSACTION_TYPE_CHOICES = [
         ('prepay', 'Передоплата'),
         ('payment', 'Оплата'),
@@ -112,7 +112,8 @@ class Transaction(models.Model):
         Order,
         on_delete=models.CASCADE,
         related_name='transactions',
-        null=True, blank=True # Додано null=True, щоб дозволити внесення/видачу без прив'язки до замовлення
+        null=True,
+        blank=True
     )
     cash_register = models.ForeignKey(
         CashRegister,
@@ -133,6 +134,7 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.transaction_type} — {self.amount} {self.currency}"
 
+
 class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,
@@ -150,7 +152,7 @@ class OrderItem(models.Model):
     def __str__(self):
         return f'{self.product.name} x {self.quantity}'
 
-# ЗАДАЧА 3 — Модель для курсів валют
+
 class ExchangeRate(models.Model):
     currency = models.CharField(max_length=3, unique=True)
     rate_to_uah = models.DecimalField(max_digits=10, decimal_places=4)

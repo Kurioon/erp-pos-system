@@ -1,6 +1,5 @@
 from django.contrib import admin
-from .models import CashRegister, Order, Transaction, OrderItem
-
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 
 @admin.register(CashRegister)
 class CashRegisterAdmin(admin.ModelAdmin):
@@ -26,3 +25,14 @@ class TransactionAdmin(admin.ModelAdmin):
 class OrderItemAdmin(admin.ModelAdmin):
     list_display = ('id', 'order', 'product', 'quantity', 'price')
     search_fields = ('order__id', 'product__name')
+
+
+@admin.register(Supplier)
+class SupplierAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'phone', 'email')
+    search_fields = ('name', 'phone')
+
+
+@admin.register(ExchangeRate)
+class ExchangeRateAdmin(admin.ModelAdmin):
+    list_display = ('currency', 'rate_to_uah', 'updated_at')

@@ -1,5 +1,6 @@
 import io
 import csv
+from django.db.models import Q
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from django.http import HttpResponse
@@ -63,9 +64,37 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Override queryset to return only non-archived service jobs (is_archived=False).
+        Повертає список ремонтів з підтримкою фільтрації за статусом, 
+        коміркою, глобальним пошуком та сортуванням за датою.
         """
-        return ServiceJob.objects.filter(is_archived=False)
+        queryset = ServiceJob.objects.filter(is_archived=False)
+        params = self.request.query_params
+
+        # Фільтр по статусу
+        status = params.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # Фільтр по комірці
+        cell = params.get('storage_cell')
+        if cell:
+            queryset = queryset.filter(storage_cell__iexact=cell)
+
+        # Пошук по пристрою, клієнту, номеру або опису
+        search = params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(device_name__icontains=search) |
+                Q(customer_name__icontains=search) |
+                Q(customer_phone__icontains=search) |
+                Q(description__icontains=search)
+            )
+
+        # Сортування по даті
+        ordering = params.get('ordering', '-created_at')
+        queryset = queryset.order_by(ordering)
+
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """

@@ -129,6 +129,35 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
     return t
 
 
+@transaction.atomic
+def process_receive(order: Order, warehouse, user) -> Order:
+    """Оприходування закупівлі: товар надходить на вказаний склад.
+
+    Закупівля не прив'язана до каси/складу, тому склад призначення
+    передається явно. Після оприходування статус стає 'paid' (оброблено).
+    """
+    if order.order_type != 'purchase':
+        raise ValueError('Оприходувати можна лише замовлення-закупівлі (purchase).')
+    if order.status != 'draft':
+        raise ValueError(f"Оприходувати можна лише чернетку. Поточний статус: '{order.status}'.")
+    if not order.items.exists():
+        raise ValueError('У закупівлі немає позицій для оприходування.')
+
+    for item in order.items.all():
+        add_stock(
+            warehouse=warehouse,
+            nomenclature=item.product,
+            quantity=item.quantity,
+            reason='purchase',
+            order=order,
+        )
+
+    order.status = 'paid'
+    order.balance_due = Decimal('0.00')
+    order.save()
+    return order
+
+
 def _deduct_order_items(order: Order):
     for item in order.items.all():
         if order.order_type == 'retail':

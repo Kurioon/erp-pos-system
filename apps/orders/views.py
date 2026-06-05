@@ -11,7 +11,7 @@ from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
 from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
-from .services import process_refund, process_prepay, process_cancellation
+from .services import process_refund, process_prepay, process_cancellation, process_receive
 from config.pdf_utils import ensure_pdf_font
 
 
@@ -487,6 +487,51 @@ class OrderCancelView(APIView):
             'order_id': order.id,
             'status': order.status,
             'transaction_id': t.id if t else None,
+        }, status=status.HTTP_201_CREATED)
+
+
+class OrderReceiveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'warehouse': {'type': 'integer', 'example': 10},
+                },
+                'required': ['warehouse'],
+            }
+        },
+        description='Оприходування закупівлі: товар надходить на вказаний склад. '
+                    'Доступно лише для purchase зі статусом draft. Статус: draft → paid.',
+    )
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        warehouse_id = request.data.get('warehouse')
+        if not warehouse_id:
+            return Response({'error': 'Поле warehouse є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from warehouses.models import Warehouse
+        try:
+            warehouse = Warehouse.objects.get(pk=warehouse_id, is_archived=False)
+        except Warehouse.DoesNotExist:
+            return Response({'error': 'Склад не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            process_receive(order, warehouse, request.user)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.refresh_from_db()
+        ActivityLog.log(request.user, 'update', order)
+        return Response({
+            'order_id': order.id,
+            'status': order.status,
         }, status=status.HTTP_201_CREATED)
 
 

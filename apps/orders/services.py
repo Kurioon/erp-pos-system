@@ -52,6 +52,12 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
 
     is_first_payment = order.status == 'draft'
 
+    # Якщо оплата покриває весь залишок боргу — це повна оплата ('payment'),
+    # інакше часткова ('prepay'). Так у «Фінансах» повна оплата (зокрема
+    # дооплата, що закриває борг) не показується як часткова.
+    is_full_payment = amount_uah >= order.balance_due
+    tx_type = 'payment' if is_full_payment else 'prepay'
+
     # Transaction зберігає фактичну валюту та суму оплати (як пройшло через касу)
     t = Transaction.objects.create(
         order=order,
@@ -59,7 +65,7 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         user=user,
         amount=amount,
         currency=currency,
-        transaction_type='prepay',
+        transaction_type=tx_type,
     )
 
     order.prepay_amount += amount_uah

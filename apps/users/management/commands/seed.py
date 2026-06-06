@@ -217,9 +217,8 @@ class Command(BaseCommand):
             return order
 
         iphone = by_code.get('PHN002')
-        headphones = by_code.get('HP001')
-        supplier1 = Supplier.objects.filter(name='ТОВ «Техно-Опт»').first()
 
+        # Роздрібне замовлення у валюті (Задача 7): борг ведеться у USD.
         if iphone is not None:
             o_usd = ensure_order(
                 'SEED-RETAIL-USD', order_type='retail', status='draft',
@@ -229,15 +228,46 @@ class Command(BaseCommand):
                 # Ціна-снепшот у валюті замовлення (USD) = base_price товару
                 OrderItem.objects.create(order=o_usd, product=iphone, quantity=1, price=Decimal('999.00'))
 
-        if headphones is not None:
-            o_eur = ensure_order(
-                'SEED-PURCHASE-EUR', order_type='purchase', status='draft',
-                currency='EUR', user=admin_user, cash_register=cr2, supplier=supplier1,
+        # Закупівлі (Задачі 4/5): покривають майже всі товари, розподілені між
+        # постачальниками → у кожного товару зʼявляється постачальник
+        # (supplier_name береться з останньої закупівлі, що містить товар).
+        suppliers = {s.name: s for s in Supplier.objects.all()}
+        TO = 'ТОВ «Техно-Опт»'
+        FOP = 'ФОП Іваненко І.І.'
+        GD = 'ТОВ «Глобал Дистрибуція»'
+        purchase_orders = [
+            ('SEED-PO-1', TO, 'UAH', [('NB001', 2), ('NB002', 2), ('PC001', 3)]),
+            ('SEED-PO-2', FOP, 'UAH', [('KB001', 5), ('MS001', 4), ('USB001', 6), ('WC001', 3)]),
+            ('SEED-PO-3', GD, 'UAH', [('HDD001', 4), ('RAM001', 6), ('THERM001', 10), ('SCRW001', 8)]),
+            ('SEED-PO-4', TO, 'UAH', [('PSU001', 5), ('CBL001', 12), ('BG001', 3)]),
+            ('SEED-PO-5', FOP, 'USD', [('PHN001', 2), ('PHN002', 1), ('TAB001', 2)]),
+            ('SEED-PO-6', GD, 'EUR', [('SPK001', 3), ('HP001', 2)]),
+        ]
+        for marker, sup_name, cur, lines in purchase_orders:
+            order = ensure_order(
+                marker, order_type='purchase', status='draft', currency=cur,
+                user=admin_user, cash_register=cr1, supplier=suppliers.get(sup_name),
             )
-            if not o_eur.items.exists():
-                OrderItem.objects.create(order=o_eur, product=headphones, quantity=2, price=Decimal('250.00'))
+            if not order.items.exists():
+                for code, qty in lines:
+                    prod = by_code.get(code)
+                    if prod is None:
+                        continue
+                    # Ціна-снепшот у валюті замовлення:
+                    # UAH → закупівельна ціна; USD/EUR → base_price товару.
+                    price = prod.purchase_price if cur == 'UAH' else (prod.base_price or prod.purchase_price)
+                    OrderItem.objects.create(order=order, product=prod, quantity=qty, price=price)
 
-        self.stdout.write(f'✓ {Order.objects.count()} замовлень у базі')
+        purchases = Order.objects.filter(order_type='purchase').count()
+        with_supplier = Nomenclature.objects.filter(
+            order_items__order__order_type='purchase',
+            order_items__order__supplier__isnull=False,
+        ).distinct().count()
+        total_products = Nomenclature.objects.count()
+        self.stdout.write(
+            f'✓ {Order.objects.count()} замовлень (з них {purchases} закупівель); '
+            f'{with_supplier}/{total_products} товарів мають постачальника'
+        )
 
         self.stdout.write('')
         self.stdout.write('=== Seed завершено ===')

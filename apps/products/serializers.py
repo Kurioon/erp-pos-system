@@ -61,6 +61,15 @@ class NomenclatureSerializer(serializers.ModelSerializer):
         data['sale_price'] = data.get('price_uah')
         return data
 
+    def validate_code(self, value):
+        # Задача 5: дубль code → 400 з ясним повідомленням
+        qs = Nomenclature.objects.filter(code=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(f'Товар з артикулом "{value}" вже існує.')
+        return value
+
     def validate_base_price(self, value):
         if value is not None and value <= Decimal('0.00'):
             raise serializers.ValidationError('base_price має бути більше 0')

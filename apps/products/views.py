@@ -63,6 +63,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         if max_price := params.get('max_price'):
             queryset = queryset.filter(sale_price__lte=max_price)
 
+        if category_id := params.get('category'):
+            queryset = queryset.filter(category_id=category_id)
+
         return queryset
 
     def perform_create(self, serializer):

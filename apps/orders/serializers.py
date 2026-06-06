@@ -61,6 +61,13 @@ class OrderSerializer(serializers.ModelSerializer):
         return obj.supplier.name if obj.supplier else None
 
     def validate_total_amount(self, value):
+        instance = self.instance
+        order_type = self.initial_data.get('order_type', instance.order_type if instance else None)
+        
+        # Дозволяємо суму 0 для порожніх чернеток закупівель
+        if order_type == 'purchase' and value == 0:
+            return value
+            
         if value <= 0:
             raise serializers.ValidationError('Загальна сума повинна бути більше нуля.')
         return value

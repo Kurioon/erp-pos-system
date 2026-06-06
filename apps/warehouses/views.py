@@ -353,12 +353,18 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         Override queryset to return only non-archived warehouse stocks (is_archived=False).
         ОНОВЛЕНО: Додано select_related для вирішення проблеми N+1 запитів!
         """
-        return WarehouseStock.objects.filter(
+        queryset = WarehouseStock.objects.filter(
             is_archived=False
         ).select_related(
             'warehouse',
             'nomenclature'
         ).order_by('id')  # стабільний порядок — обов'язково для коректної пагінації
+
+        nomenclature_id = self.request.query_params.get('nomenclature')
+        if nomenclature_id:
+            queryset = queryset.filter(nomenclature_id=nomenclature_id)
+
+        return queryset
 
     def destroy(self, request, *args, **kwargs):
         """

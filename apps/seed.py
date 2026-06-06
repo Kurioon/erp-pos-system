@@ -88,7 +88,7 @@ products_data = [
 created_products = []
 for data in products_data:
     from decimal import Decimal
-    p, created = Nomenclature.objects.get_or_create(
+    p, created = Nomenclature.objects.update_or_create(
         code=data['code'],
         defaults={
             'name': data['name'],
@@ -97,6 +97,7 @@ for data in products_data:
             'purchase_price': Decimal(data['purchase_price']),
             'markup_percentage': Decimal(data['markup_percentage']),
             'vat_rate': Decimal(data['vat_rate']),
+            'type': 'product',
         }
     )
     created_products.append(p)

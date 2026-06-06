@@ -86,22 +86,23 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         search = params.get('search')
         if search:
             import re
-            from django.db.models.functions import LPad, Cast
+            from django.db.models.functions import Cast, Concat
             from django.db.models import CharField, Value
             
-            # Додаємо віртуальне поле formatted_id (наприклад '009' для id=9)
+            # Віртуальне поле formatted_id (точно так, як на фронтенді: 'R00' + id, наприклад 'R009', 'R0014')
             queryset = queryset.annotate(
-                formatted_id=LPad(Cast('id', CharField()), 3, Value('0'))
+                formatted_id=Concat(Value('R00'), Cast('id', CharField()))
             )
             
             query = Q(device_name__icontains=search) | Q(customer_name__icontains=search) | Q(customer_phone__icontains=search) | Q(description__icontains=search)
             
-            # Підтримка пошуку по ID формату: 15, #15, №15, id15, id 15, R009, R-15
+            # Витягуємо цифри, якщо пошук виглядає як ID (#15, R001, id 14)
             match = re.search(r'^(?:#|№|id\s*|r\s*-?\s*)?(\d+)$', search.strip(), re.IGNORECASE)
             if match:
                 query |= Q(formatted_id__icontains=match.group(1))
-            elif search.isdigit():
-                query |= Q(formatted_id__icontains=search)
+            else:
+                # Якщо це просто буква "R" або інший текст, шукаємо повноцінно по рядку
+                query |= Q(formatted_id__icontains=search.strip())
                 
             queryset = queryset.filter(query)
 

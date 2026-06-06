@@ -6,6 +6,27 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 
+class Category(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    # parent — закладено під ієрархію (дерево категорій реалізуємо пізніше)
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='children',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Категорія'
+        verbose_name_plural = 'Категорії'
+
+    def __str__(self):
+        return self.name
+
+
 class Nomenclature(models.Model):
     # Base fields
     code = models.CharField(max_length=50, unique=True)
@@ -17,6 +38,14 @@ class Nomenclature(models.Model):
     description = models.TextField(blank=True, null=True)
     barcode = models.CharField(max_length=100, blank=True, null=True, unique=True)
     manufactured = models.CharField(max_length=100, blank=True, null=True)
+    # Категорія/тип товару (Телефон, Ноутбук, Чохол…). Необов'язкова.
+    category = models.ForeignKey(
+        'Category',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products',
+    )
 
     # Financial fields
     purchase_price = models.DecimalField(

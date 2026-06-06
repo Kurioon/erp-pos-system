@@ -10,9 +10,20 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from activity_log.models import ActivityLog
-from users.permissions import IsAdminRole
-from .models import Nomenclature
-from .serializers import NomenclatureSerializer
+from users.permissions import IsAdminRole, IsAdminOrReadOnly
+from .models import Nomenclature, Category
+from .serializers import NomenclatureSerializer, CategorySerializer
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """Довідник категорій товарів.
+
+    Читання — всі авторизовані; створення/зміна/видалення — лише admin.
+    Дубль назви відхиляється на рівні unique-валідації (HTTP 400, поле name).
+    """
+    queryset = Category.objects.all().order_by('name')
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
 
 
 class ProductViewSet(viewsets.ModelViewSet):

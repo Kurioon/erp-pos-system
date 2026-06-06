@@ -2,10 +2,21 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import Nomenclature
+from .models import Nomenclature, Category
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'parent']
 
 
 class NomenclatureSerializer(serializers.ModelSerializer):
+    # Назва категорії для відображення (read-only)
+    category_name = serializers.SerializerMethodField()
+
+    def get_category_name(self, obj):
+        return obj.category.name if obj.category_id else None
 
     def validate_purchase_price(self, value):
         if value <= Decimal('0.00'):
@@ -33,6 +44,8 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             'id',
             'code',
             'name',
+            'category',
+            'category_name',
             'unit',
             'image',
             'description',

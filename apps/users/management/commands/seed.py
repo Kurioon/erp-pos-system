@@ -2,7 +2,7 @@
 from decimal import Decimal
 from django.core.management.base import BaseCommand
 from users.models import CustomUser
-from products.models import Nomenclature
+from products.models import Nomenclature, Category
 from warehouses.models import Warehouse, WarehouseStock
 from orders.models import CashRegister, ExchangeRate, Supplier
 
@@ -81,6 +81,29 @@ class Command(BaseCommand):
             )
         self.stdout.write('✓ Постачальники створені')
 
+        # Категорії товарів
+        category_names = [
+            'Ноутбуки', 'Монітори', 'Периферія', 'Комплектуючі', 'Аксесуари',
+            'Смартфони', 'Планшети', 'Аудіо', 'Програмне забезпечення',
+        ]
+        categories = {}
+        for cname in category_names:
+            cat, _ = Category.objects.get_or_create(name=cname)
+            categories[cname] = cat
+        self.stdout.write(f'✓ {len(categories)} категорій створено/знайдено')
+
+        code_to_category = {
+            'NB001': 'Ноутбуки', 'NB002': 'Ноутбуки',
+            'PC001': 'Монітори',
+            'KB001': 'Периферія', 'MS001': 'Периферія', 'WC001': 'Периферія', 'USB001': 'Периферія',
+            'HDD001': 'Комплектуючі', 'RAM001': 'Комплектуючі', 'THERM001': 'Комплектуючі',
+            'PSU001': 'Аксесуари', 'CBL001': 'Аксесуари', 'BG001': 'Аксесуари', 'SCRW001': 'Аксесуари',
+            'PHN001': 'Смартфони', 'PHN002': 'Смартфони',
+            'TAB001': 'Планшети',
+            'SPK001': 'Аудіо', 'HP001': 'Аудіо',
+            'ANTV001': 'Програмне забезпечення',
+        }
+
         # Номенклатура
         products_data = [
             ('NB001', 'Ноутбук Lenovo IdeaPad 15', 'шт', '4820001000001', '18000.00', '15.00', '20.00'),
@@ -122,6 +145,11 @@ class Command(BaseCommand):
             # Дозаповнюємо лише якщо ще не задано (ідемпотентність seed).
             if p.wholesale_price is None:
                 p.wholesale_price = (Decimal(purchase) * Decimal('1.10')).quantize(Decimal('0.01'))
+                p.save()
+            # Прив'язка категорії (лише якщо ще не задано — ідемпотентність seed)
+            cat_name = code_to_category.get(code)
+            if cat_name and p.category_id is None:
+                p.category = categories[cat_name]
                 p.save()
             created_products.append(p)
 

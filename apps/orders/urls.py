@@ -15,6 +15,7 @@ from .views import (
     OrderRefundView,
     OrderPrepayView,
     OrderCancelView,
+    OrderReceiveView,
     OrderReceiptPDFView,
     ExchangeRateListView,       
     ExchangeRateUpdateView,
@@ -40,6 +41,7 @@ urlpatterns = [
     path('orders/<int:pk>/refund/', OrderRefundView.as_view(), name='order-refund'),
     path('orders/<int:pk>/prepay/', OrderPrepayView.as_view(), name='order-prepay'),
     path('orders/<int:pk>/cancel/', OrderCancelView.as_view(), name='order-cancel'),
+    path('orders/<int:pk>/receive/', OrderReceiveView.as_view(), name='order-receive'),
     path('orders/<int:pk>/receipt/', OrderReceiptPDFView.as_view(), name='order-receipt'),
 
     path('orders/<int:order_id>/items/', OrderItemListCreateView.as_view(), name='orderitem-list'),

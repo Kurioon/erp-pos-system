@@ -52,6 +52,12 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
 
     is_first_payment = order.status == 'draft'
 
+    # Якщо оплата покриває весь залишок боргу — це повна оплата ('payment'),
+    # інакше часткова ('prepay'). Так у «Фінансах» повна оплата (зокрема
+    # дооплата, що закриває борг) не показується як часткова.
+    is_full_payment = amount_uah >= order.balance_due
+    tx_type = 'payment' if is_full_payment else 'prepay'
+
     # Transaction зберігає фактичну валюту та суму оплати (як пройшло через касу)
     t = Transaction.objects.create(
         order=order,
@@ -59,7 +65,7 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         user=user,
         amount=amount,
         currency=currency,
-        transaction_type='prepay',
+        transaction_type=tx_type,
     )
 
     order.prepay_amount += amount_uah
@@ -127,6 +133,35 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
     order.save()
 
     return t
+
+
+@transaction.atomic
+def process_receive(order: Order, warehouse, user) -> Order:
+    """Оприходування закупівлі: товар надходить на вказаний склад.
+
+    Закупівля не прив'язана до каси/складу, тому склад призначення
+    передається явно. Після оприходування статус стає 'paid' (оброблено).
+    """
+    if order.order_type != 'purchase':
+        raise ValueError('Оприходувати можна лише замовлення-закупівлі (purchase).')
+    if order.status != 'draft':
+        raise ValueError(f"Оприходувати можна лише чернетку. Поточний статус: '{order.status}'.")
+    if not order.items.exists():
+        raise ValueError('У закупівлі немає позицій для оприходування.')
+
+    for item in order.items.all():
+        add_stock(
+            warehouse=warehouse,
+            nomenclature=item.product,
+            quantity=item.quantity,
+            reason='purchase',
+            order=order,
+        )
+
+    order.status = 'paid'
+    order.balance_due = Decimal('0.00')
+    order.save()
+    return order
 
 
 def _deduct_order_items(order: Order):

@@ -29,7 +29,11 @@ class ServiceJob(models.Model):
 
     customer_name = models.CharField(max_length=255)
     customer_phone = models.CharField(max_length=20, validators=[phone_validator])
+    
+    # ДОДАНО (Задача 6): Прив'язка до довідника товарів
+    device = models.ForeignKey('products.Nomenclature', null=True, blank=True, on_delete=models.SET_NULL, related_name='service_jobs')
     device_name = models.CharField(max_length=255)
+    
     description = models.TextField(validators=[MinLengthValidator(5)])
     
     # ДОДАНО згідно з US-06: Текстовий коментар або номер ТТН (необов'язкове поле)

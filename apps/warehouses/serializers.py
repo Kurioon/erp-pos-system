@@ -34,6 +34,7 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'device',
             'device_name',
             'description',
+            'price',
             'comment',
             'photo',
             'status',

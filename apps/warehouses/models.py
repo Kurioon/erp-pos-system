@@ -36,7 +36,10 @@ class ServiceJob(models.Model):
     
     description = models.TextField(validators=[MinLengthValidator(5)])
     
-    # ДОДАНО згідно з US-06: Текстовий коментар або номер ТТН (необов'язкове поле)
+    # Орієнтовна вартість ремонту
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    # Додане поле з US-06: Відгук майстра чи коментар (необов'язкове)
     comment = models.TextField(blank=True, null=True)
     
     # ДОДАНО: Фото ремонту через Cloudinary

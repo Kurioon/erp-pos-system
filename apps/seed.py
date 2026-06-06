@@ -9,7 +9,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 from users.models import CustomUser
-from products.models import Nomenclature
+from products.models import Nomenclature, Category
 from warehouses.models import Warehouse, WarehouseStock
 from orders.models import CashRegister, Supplier, Order, OrderItem
 
@@ -40,6 +40,31 @@ print("✓ Склади створені")
 cr1, _ = CashRegister.objects.get_or_create(name='Каса Магазин №1', defaults={'warehouse': wh1})
 cr2, _ = CashRegister.objects.get_or_create(name='Каса Магазин №2', defaults={'warehouse': wh2})
 print("✓ Каси створені")
+
+# Категорії товарів (плоский довідник; дерево — пізніше).
+# Збігається зі схемою канонічного сідера `python manage.py seed`.
+category_names = [
+    'Ноутбуки', 'Монітори', 'Периферія', 'Комплектуючі', 'Аксесуари',
+    'Смартфони', 'Планшети', 'Аудіо', 'Програмне забезпечення',
+]
+categories = {}
+for cat_name in category_names:
+    cat, _ = Category.objects.get_or_create(name=cat_name)
+    categories[cat_name] = cat
+print(f"✓ {len(categories)} категорій створено/знайдено")
+
+# Прив'язка товару (за code) до категорії
+product_category_map = {
+    'NB001': 'Ноутбуки', 'NB002': 'Ноутбуки',
+    'PC001': 'Монітори',
+    'KB001': 'Периферія', 'MS001': 'Периферія', 'USB001': 'Периферія', 'WC001': 'Периферія',
+    'HDD001': 'Комплектуючі', 'RAM001': 'Комплектуючі', 'THERM001': 'Комплектуючі',
+    'PSU001': 'Аксесуари', 'CBL001': 'Аксесуари', 'BG001': 'Аксесуари', 'SCRW001': 'Аксесуари',
+    'PHN001': 'Смартфони', 'PHN002': 'Смартфони',
+    'TAB001': 'Планшети',
+    'SPK001': 'Аудіо', 'HP001': 'Аудіо',
+    'ANTV001': 'Програмне забезпечення',
+}
 
 # Номенклатура
 products_data = [
@@ -98,6 +123,7 @@ for data in products_data:
             'markup_percentage': Decimal(data['markup_percentage']),
             'vat_rate': Decimal(data['vat_rate']),
             'type': 'product',
+            'category': categories.get(product_category_map.get(data['code'])),
         }
     )
     created_products.append(p)

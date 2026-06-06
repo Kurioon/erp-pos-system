@@ -46,6 +46,7 @@ class OrderSerializer(serializers.ModelSerializer):
     supplier_name = serializers.SerializerMethodField()
     supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
     can_refund = serializers.SerializerMethodField()
+    can_view_receipt = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -55,6 +56,9 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_can_refund(self, obj):
         return obj.status == 'paid'
+
+    def get_can_view_receipt(self, obj):
+        return obj.status in ('partial', 'paid')
 
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)

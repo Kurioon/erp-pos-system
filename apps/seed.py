@@ -9,7 +9,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 from users.models import CustomUser
-from products.models import Nomenclature
+from products.models import Nomenclature, Category
 from warehouses.models import Warehouse, WarehouseStock
 from orders.models import CashRegister, Supplier, Order, OrderItem
 
@@ -41,53 +41,64 @@ cr1, _ = CashRegister.objects.get_or_create(name='Каса Магазин №1',
 cr2, _ = CashRegister.objects.get_or_create(name='Каса Магазин №2', defaults={'warehouse': wh2})
 print("✓ Каси створені")
 
+# Категорії
+cat_phones, _ = Category.objects.get_or_create(name='Смартфони')
+cat_laptops, _ = Category.objects.get_or_create(name='Ноутбуки')
+cat_tablets, _ = Category.objects.get_or_create(name='Планшети')
+cat_accessories, _ = Category.objects.get_or_create(name='Аксесуари')
+cat_audio, _ = Category.objects.get_or_create(name='Аудіо')
+cat_components, _ = Category.objects.get_or_create(name='Комплектуючі')
+cat_software, _ = Category.objects.get_or_create(name='Програмне забезпечення')
+print("✓ Категорії створені")
+
 # Номенклатура
 products_data = [
     {'code': 'NB001', 'name': 'Ноутбук Lenovo IdeaPad 15', 'unit': 'шт', 'barcode': '4820001000001',
-     'purchase_price': '18000.00', 'markup_percentage': '15.00', 'vat_rate': '20.00'},
+     'purchase_price': '18000.00', 'markup_percentage': '15.00', 'vat_rate': '20.00', 'category': cat_laptops},
     {'code': 'NB002', 'name': 'Ноутбук HP Pavilion 14', 'unit': 'шт', 'barcode': '4820001000002',
-     'purchase_price': '22000.00', 'markup_percentage': '12.00', 'vat_rate': '20.00'},
+     'purchase_price': '22000.00', 'markup_percentage': '12.00', 'vat_rate': '20.00', 'category': cat_laptops},
     {'code': 'PC001', 'name': 'Монітор Samsung 27"', 'unit': 'шт', 'barcode': '4820001000003',
-     'purchase_price': '8500.00', 'markup_percentage': '18.00', 'vat_rate': '20.00'},
+     'purchase_price': '8500.00', 'markup_percentage': '18.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'KB001', 'name': 'Клавіатура Logitech K380', 'unit': 'шт', 'barcode': '4820001000004',
-     'purchase_price': '1200.00', 'markup_percentage': '25.00', 'vat_rate': '20.00'},
+     'purchase_price': '1200.00', 'markup_percentage': '25.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'MS001', 'name': 'Миша Logitech MX Master 3', 'unit': 'шт', 'barcode': '4820001000005',
-     'purchase_price': '2800.00', 'markup_percentage': '20.00', 'vat_rate': '20.00'},
+     'purchase_price': '2800.00', 'markup_percentage': '20.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'HDD001', 'name': 'SSD Samsung 1TB', 'unit': 'шт', 'barcode': '4820001000006',
-     'purchase_price': '3200.00', 'markup_percentage': '15.00', 'vat_rate': '20.00'},
+     'purchase_price': '3200.00', 'markup_percentage': '15.00', 'vat_rate': '20.00', 'category': cat_components},
     {'code': 'RAM001', 'name': 'RAM DDR4 16GB Kingston', 'unit': 'шт', 'barcode': '4820001000007',
-     'purchase_price': '1800.00', 'markup_percentage': '20.00', 'vat_rate': '20.00'},
+     'purchase_price': '1800.00', 'markup_percentage': '20.00', 'vat_rate': '20.00', 'category': cat_components},
     {'code': 'PSU001', 'name': 'Зарядний пристрій USB-C 65W', 'unit': 'шт', 'barcode': '4820001000008',
-     'purchase_price': '950.00', 'markup_percentage': '30.00', 'vat_rate': '20.00'},
+     'purchase_price': '950.00', 'markup_percentage': '30.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'CBL001', 'name': 'Кабель HDMI 2м', 'unit': 'шт', 'barcode': '4820001000009',
-     'purchase_price': '150.00', 'markup_percentage': '50.00', 'vat_rate': '20.00'},
+     'purchase_price': '150.00', 'markup_percentage': '50.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'BG001', 'name': 'Сумка для ноутбука 15.6"', 'unit': 'шт', 'barcode': '4820001000010',
-     'purchase_price': '650.00', 'markup_percentage': '35.00', 'vat_rate': '20.00'},
+     'purchase_price': '650.00', 'markup_percentage': '35.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'PHN001', 'name': 'Смартфон Samsung Galaxy A55', 'unit': 'шт', 'barcode': '4820001000011',
-     'purchase_price': '14000.00', 'markup_percentage': '10.00', 'vat_rate': '20.00'},
+     'purchase_price': '14000.00', 'markup_percentage': '10.00', 'vat_rate': '20.00', 'category': cat_phones},
     {'code': 'PHN002', 'name': 'Смартфон iPhone 15', 'unit': 'шт', 'barcode': '4820001000012',
-     'purchase_price': '38000.00', 'markup_percentage': '8.00', 'vat_rate': '20.00'},
+     'purchase_price': '38000.00', 'markup_percentage': '8.00', 'vat_rate': '20.00', 'category': cat_phones},
     {'code': 'TAB001', 'name': 'Планшет iPad Air 11"', 'unit': 'шт', 'barcode': '4820001000013',
-     'purchase_price': '28000.00', 'markup_percentage': '10.00', 'vat_rate': '20.00'},
+     'purchase_price': '28000.00', 'markup_percentage': '10.00', 'vat_rate': '20.00', 'category': cat_tablets},
     {'code': 'SPK001', 'name': 'Bluetooth колонка JBL Charge 5', 'unit': 'шт', 'barcode': '4820001000014',
-     'purchase_price': '3500.00', 'markup_percentage': '22.00', 'vat_rate': '20.00'},
+     'purchase_price': '3500.00', 'markup_percentage': '22.00', 'vat_rate': '20.00', 'category': cat_audio},
     {'code': 'HP001', 'name': 'Навушники Sony WH-1000XM5', 'unit': 'шт', 'barcode': '4820001000015',
-     'purchase_price': '9800.00', 'markup_percentage': '15.00', 'vat_rate': '20.00'},
+     'purchase_price': '9800.00', 'markup_percentage': '15.00', 'vat_rate': '20.00', 'category': cat_audio},
     {'code': 'THERM001', 'name': 'Термопаста Arctic MX-4', 'unit': 'шт', 'barcode': '4820001000016',
-     'purchase_price': '120.00', 'markup_percentage': '60.00', 'vat_rate': '20.00'},
+     'purchase_price': '120.00', 'markup_percentage': '60.00', 'vat_rate': '20.00', 'category': cat_components},
     {'code': 'SCRW001', 'name': 'Набір викруток для ноутбуків', 'unit': 'шт', 'barcode': '4820001000017',
-     'purchase_price': '280.00', 'markup_percentage': '40.00', 'vat_rate': '20.00'},
+     'purchase_price': '280.00', 'markup_percentage': '40.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'USB001', 'name': 'USB-хаб 4 порти 3.0', 'unit': 'шт', 'barcode': '4820001000018',
-     'purchase_price': '380.00', 'markup_percentage': '35.00', 'vat_rate': '20.00'},
+     'purchase_price': '380.00', 'markup_percentage': '35.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'WC001', 'name': 'Веб-камера Logitech C920', 'unit': 'шт', 'barcode': '4820001000019',
-     'purchase_price': '2200.00', 'markup_percentage': '20.00', 'vat_rate': '20.00'},
+     'purchase_price': '2200.00', 'markup_percentage': '20.00', 'vat_rate': '20.00', 'category': cat_accessories},
     {'code': 'ANTV001', 'name': 'Антивірус ESET 1 рік', 'unit': 'ліц', 'barcode': '4820001000020',
-     'purchase_price': '450.00', 'markup_percentage': '30.00', 'vat_rate': '20.00'},
+     'purchase_price': '450.00', 'markup_percentage': '30.00', 'vat_rate': '20.00', 'category': cat_software},
 ]
 
 created_products = []
 for data in products_data:
     from decimal import Decimal
+    category = data.pop('category', None)
     p, created = Nomenclature.objects.update_or_create(
         code=data['code'],
         defaults={
@@ -98,6 +109,7 @@ for data in products_data:
             'markup_percentage': Decimal(data['markup_percentage']),
             'vat_rate': Decimal(data['vat_rate']),
             'type': 'product',
+            'category': category,
         }
     )
     created_products.append(p)

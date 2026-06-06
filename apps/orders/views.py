@@ -105,6 +105,15 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if user_filter:
             queryset = queryset.filter(user_id=user_filter)
 
+        # Уніфікований ?search=<id|comment_ttn> — відповідає контракту API
+        search = self.request.query_params.get('search')
+        if search:
+            from django.db.models import Q as _Q
+            query = _Q(comment_ttn__icontains=search)
+            if search.isdigit():
+                query |= _Q(id=int(search))
+            queryset = queryset.filter(query)
+
         # Стабільне сортування — обов'язкове для коректної пагінації
         # (без ORDER BY PostgreSQL може дублювати/пропускати записи між сторінками).
         # Підтримуємо ?ordering= з фронту, дефолт — найновіші першими.

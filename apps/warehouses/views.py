@@ -85,12 +85,10 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         # Пошук по пристрою, клієнту, номеру або опису
         search = params.get('search')
         if search:
-            queryset = queryset.filter(
-                Q(device_name__icontains=search) |
-                Q(customer_name__icontains=search) |
-                Q(customer_phone__icontains=search) |
-                Q(description__icontains=search)
-            )
+            query = Q(device_name__icontains=search) | Q(customer_name__icontains=search) | Q(customer_phone__icontains=search) | Q(description__icontains=search)
+            if search.isdigit():
+                query |= Q(id=int(search))
+            queryset = queryset.filter(query)
 
         # Сортування по даті
         ordering = params.get('ordering', '-created_at')

@@ -15,8 +15,6 @@ class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
     photo = serializers.ImageField(required=False, allow_null=True)
     
-    device_name = serializers.CharField(max_length=255, required=False)
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from django.apps import apps
@@ -44,6 +42,9 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'device_name': {'required': False}
+        }
 
     def validate_storage_cell(self, value):
         """

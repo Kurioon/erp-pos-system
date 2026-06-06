@@ -222,6 +222,10 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         if transaction_type:
             queryset = queryset.filter(transaction_type=transaction_type)
 
+        date_filter = self.request.query_params.get('date')
+        if date_filter:
+            queryset = queryset.filter(timestamp__date=date_filter)
+
         return queryset
 
     # BUG-03 — обмеження на створення транзакцій

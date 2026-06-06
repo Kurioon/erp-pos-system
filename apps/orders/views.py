@@ -352,9 +352,9 @@ class OrderExportPDFView(APIView):
         p.setFont('DejaVu', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
-        p.drawString(50, 730, f'Total: {order.total_amount}')
-        p.drawString(50, 710, f'Prepay: {order.prepay_amount}')
-        p.drawString(50, 690, f'Balance due: {order.balance_due}')
+        p.drawString(50, 730, f'Total: {order.total_amount} {order.currency}')
+        p.drawString(50, 710, f'Prepay: {order.prepay_amount} {order.currency}')
+        p.drawString(50, 690, f'Balance due: {order.balance_due} {order.currency}')
         p.drawString(50, 670, f'Comment/TTN: {order.comment_ttn}')
         p.drawString(50, 650, f'Created: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
 
@@ -377,7 +377,7 @@ class OrderRefundView(APIView):
             return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
 
         cash_register_id = request.data.get('cash_register')
-        currency = request.data.get('currency', 'UAH')
+        currency = order.currency
 
         if not cash_register_id:
             return Response({'error': 'Поле cash_register є обовʼязковим.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -425,7 +425,8 @@ class OrderPrepayView(APIView):
             return Response({'error': 'Замовлення не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
 
         amount_raw = request.data.get('amount')
-        currency = request.data.get('currency', 'UAH')
+        # Задача 7: валюту беремо з замовлення
+        currency = order.currency
         cash_register_id = request.data.get('cash_register')
 
         if not amount_raw:
@@ -580,9 +581,9 @@ class OrderReceiptPDFView(APIView):
         p.setFont('DejaVu', 12)
         p.drawString(50, 770, f'Status: {order.status}')
         p.drawString(50, 750, f'Type: {order.order_type}')
-        p.drawString(50, 730, f'Total: {order.total_amount} UAH')
-        p.drawString(50, 710, f'Paid: {order.prepay_amount} UAH')
-        p.drawString(50, 690, f'Balance due: {order.balance_due} UAH')
+        p.drawString(50, 730, f'Total: {order.total_amount} {order.currency}')
+        p.drawString(50, 710, f'Paid: {order.prepay_amount} {order.currency}')
+        p.drawString(50, 690, f'Balance due: {order.balance_due} {order.currency}')
         p.drawString(50, 670, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
 
         p.setFont('DejaVu', 12)
@@ -591,7 +592,7 @@ class OrderReceiptPDFView(APIView):
         y = 620
         p.setFont('DejaVu', 11)
         for item in order.items.select_related('product').all():
-            line = f'{item.product.name}  x{item.quantity}  @ {item.price} UAH  = {item.quantity * item.price} UAH'
+            line = f'{item.product.name}  x{item.quantity}  @ {item.price} {order.currency}  = {item.quantity * item.price} {order.currency}'
             p.drawString(60, y, line)
             y -= 20
             if y < 50:

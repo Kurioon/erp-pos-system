@@ -92,6 +92,9 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
         # Сортування по даті
         ordering = params.get('ordering', '-created_at')
+        allowed_ordering = {'created_at', '-created_at', 'id', '-id', 'status', '-status'}
+        if ordering not in allowed_ordering:
+            ordering = '-created_at'
         queryset = queryset.order_by(ordering)
 
         return queryset

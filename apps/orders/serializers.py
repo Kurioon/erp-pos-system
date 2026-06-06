@@ -45,12 +45,16 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     supplier_name = serializers.SerializerMethodField()
     supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
+    can_refund = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = '__all__'
         # user проставляється автоматично з request (автор замовлення)
         read_only_fields = ['balance_due', 'status', 'user']
+
+    def get_can_refund(self, obj):
+        return obj.status == 'paid'
 
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)

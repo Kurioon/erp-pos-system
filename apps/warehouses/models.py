@@ -66,6 +66,7 @@ class WarehouseStock(models.Model):
     nomenclature = models.ForeignKey('products.Nomenclature', on_delete=models.PROTECT, related_name='warehouse_stocks')
     
     quantity = models.IntegerField(default=0)
+    reserved_quantity = models.IntegerField(default=0)
 
     is_archived = models.BooleanField(default=False)
 

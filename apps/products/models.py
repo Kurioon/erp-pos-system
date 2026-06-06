@@ -26,9 +26,15 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+TYPE_CHOICES = (
+    ('product', 'Товар'),
+    ('service', 'Послуга'),
+)
+
 
 class Nomenclature(models.Model):
     # Base fields
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='product')
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
     unit = models.CharField(max_length=50, default='шт')

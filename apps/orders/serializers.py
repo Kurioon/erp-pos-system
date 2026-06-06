@@ -44,6 +44,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     supplier_name = serializers.SerializerMethodField()
+    supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Order
@@ -71,7 +72,13 @@ class OrderSerializer(serializers.ModelSerializer):
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
 
         order_type = data.get('order_type', instance.order_type if instance else None)
+        supplier_name_input = data.pop('supplier_name_input', None)
         supplier = data.get('supplier', instance.supplier if instance else None)
+
+        if supplier_name_input:
+            from .models import Supplier
+            supplier, _ = Supplier.objects.get_or_create(name=supplier_name_input)
+            data['supplier'] = supplier
 
         if order_type == 'retail' and supplier is not None:
             raise serializers.ValidationError(

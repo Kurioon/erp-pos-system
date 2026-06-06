@@ -55,6 +55,20 @@ class NomenclatureSerializer(serializers.ModelSerializer):
         except ValueError:
             return None
 
+    supplier_name = serializers.SerializerMethodField()
+
+    def get_supplier_name(self, obj):
+        from orders.models import OrderItem
+        last_item = OrderItem.objects.filter(
+            product=obj,
+            order__order_type='purchase',
+            order__supplier__isnull=False
+        ).order_by('-order__created_at').first()
+        
+        if last_item:
+            return last_item.order.supplier.name
+        return None
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         # sale_price у відповіді завжди дорівнює price_uah (для сумісності з POS)
@@ -124,6 +138,7 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             'markup_percentage',
             'sale_price',
             'wholesale_price',
+            'supplier_name',
             'vat_rate',
             'is_archived',
             'created_at',

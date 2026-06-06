@@ -11,7 +11,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 from users.models import CustomUser
 from products.models import Nomenclature
 from warehouses.models import Warehouse, WarehouseStock
-from orders.models import CashRegister
+from orders.models import CashRegister, Supplier, Order, OrderItem
 
 print("=== Запуск seed скрипту ===")
 
@@ -120,6 +120,43 @@ for wh, prod_idx, qty in stock_data:
     )
 
 print("✓ Залишки на складах заповнені")
+
+# Постачальники
+supplier1, _ = Supplier.objects.get_or_create(name='Apple Distribution Ukraine', defaults={'phone': '+380441234567'})
+supplier2, _ = Supplier.objects.get_or_create(name='Samsung Electronics Ukraine', defaults={'phone': '+380447654321'})
+print("✓ Постачальники створені")
+
+# Закупівлі
+order1, _ = Order.objects.get_or_create(
+    comment_ttn='Закупівля Apple',
+    order_type='purchase',
+    defaults={
+        'supplier': supplier1,
+        'user': admin,
+        'status': 'draft',
+        'total_amount': Decimal('66000.00'),
+    }
+)
+if not order1.items.exists():
+    OrderItem.objects.create(order=order1, product=created_products[11], quantity=1, price=Decimal('38000.00'))
+    OrderItem.objects.create(order=order1, product=created_products[12], quantity=1, price=Decimal('28000.00'))
+
+order2, _ = Order.objects.get_or_create(
+    comment_ttn='Закупівля Samsung',
+    order_type='purchase',
+    defaults={
+        'supplier': supplier2,
+        'user': admin,
+        'status': 'draft',
+        'total_amount': Decimal('22500.00'),
+    }
+)
+if not order2.items.exists():
+    OrderItem.objects.create(order=order2, product=created_products[10], quantity=1, price=Decimal('14000.00'))
+    OrderItem.objects.create(order=order2, product=created_products[2], quantity=1, price=Decimal('8500.00'))
+
+print("✓ Закупівлі створені")
+
 print()
 print("=== Seed завершено успішно ===")
 print()

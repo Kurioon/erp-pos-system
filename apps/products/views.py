@@ -64,7 +64,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(sale_price__lte=max_price)
 
         if category_id := params.get('category'):
-            queryset = queryset.filter(category_id=category_id)
+            try:
+                queryset = queryset.filter(category_id=int(category_id))
+            except (ValueError, TypeError):
+                pass  # невалідне значення — ігноруємо, не падаємо
 
         return queryset
 

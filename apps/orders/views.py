@@ -1,6 +1,7 @@
 import csv
 import io
 from decimal import Decimal
+from django.db.models import Q
 from django.http import HttpResponse
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -108,10 +109,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
         # Уніфікований ?search=<id|comment_ttn> — відповідає контракту API
         search = self.request.query_params.get('search')
         if search:
-            from django.db.models import Q as _Q
-            query = _Q(comment_ttn__icontains=search)
+            query = Q(comment_ttn__icontains=search)
             if search.isdigit():
-                query |= _Q(id=int(search))
+                query |= Q(id=int(search))
             queryset = queryset.filter(query)
 
         # Стабільне сортування — обов'язкове для коректної пагінації

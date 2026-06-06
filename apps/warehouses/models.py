@@ -82,6 +82,7 @@ class StockMovement(models.Model):
         ('purchase', 'Закупівля'),
         ('return', 'Повернення'),
         ('correction', 'Коригування'),
+        ('transfer', 'Переміщення'),
     ]
 
     warehouse = models.ForeignKey('Warehouse', on_delete=models.CASCADE, related_name='movements')
@@ -91,6 +92,10 @@ class StockMovement(models.Model):
     quantity_after = models.IntegerField()
     reason = models.CharField(max_length=20, choices=REASON_CHOICES)
     order = models.ForeignKey('orders.Order', on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Для переміщень між складами зберігаємо другий склад (звідки або куди)
+    transfer_warehouse = models.ForeignKey('Warehouse', on_delete=models.SET_NULL, null=True, blank=True, related_name='transfer_movements')
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

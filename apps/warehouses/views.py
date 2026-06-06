@@ -524,8 +524,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
                 warehouse=source_stock.warehouse,
                 nomenclature=source_stock.nomenclature,
                 quantity=quantity,
-                reason='move_out',
-                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+                reason='transfer',
+                order=None,  # Внутрішнє переміщення, не пов'язане з замовленням
+                transfer_warehouse=destination_warehouse
             )
             
             # Додаємо на новий склад
@@ -533,8 +534,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
                 warehouse=destination_warehouse,
                 nomenclature=source_stock.nomenclature,
                 quantity=quantity,
-                reason='move_in',
-                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+                reason='transfer',
+                order=None,  # Внутрішнє переміщення, не пов'язане з замовленням
+                transfer_warehouse=source_stock.warehouse
             )
             
             ActivityLog.log(self.request.user, 'update', source_stock, 

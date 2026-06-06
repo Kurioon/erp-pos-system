@@ -131,10 +131,11 @@ class WarehouseStockSerializer(serializers.ModelSerializer):
 class StockMovementSerializer(serializers.ModelSerializer):
     warehouse = serializers.CharField(source='warehouse.name', read_only=True)
     nomenclature = serializers.CharField(source='nomenclature.name', read_only=True)
+    transfer_warehouse = serializers.CharField(source='transfer_warehouse.name', read_only=True)
 
     class Meta:
         model = StockMovement
         fields = [
             'id', 'warehouse', 'nomenclature', 'quantity_change', 
-            'quantity_before', 'quantity_after', 'reason', 'order', 'created_at'
+            'quantity_before', 'quantity_after', 'reason', 'order', 'transfer_warehouse', 'created_at'
         ]

@@ -109,10 +109,15 @@ class OrderListCreateView(generics.ListCreateAPIView):
         # Уніфікований ?search=<id|comment_ttn> — відповідає контракту API
         search = self.request.query_params.get('search')
         if search:
-            query = Q(comment_ttn__icontains=search)
+            query = (
+                Q(comment_ttn__icontains=search)
+                | Q(supplier__name__icontains=search)
+                | Q(items__product__name__icontains=search)
+                | Q(items__product__code__icontains=search)
+            )
             if search.isdigit():
                 query |= Q(id=int(search))
-            queryset = queryset.filter(query)
+            queryset = queryset.filter(query).distinct()
 
         # Стабільне сортування — обов'язкове для коректної пагінації
         # (без ORDER BY PostgreSQL може дублювати/пропускати записи між сторінками).

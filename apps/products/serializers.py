@@ -20,6 +20,9 @@ class NomenclatureSerializer(serializers.ModelSerializer):
     price_usd = serializers.SerializerMethodField()
     price_eur = serializers.SerializerMethodField()
 
+    purchase_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    markup_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+
     def get_category_name(self, obj):
         return obj.category.name if obj.category_id else None
 
@@ -82,6 +85,13 @@ class NomenclatureSerializer(serializers.ModelSerializer):
         if value is not None and value < Decimal('0.00'):
             raise serializers.ValidationError('Націнка не може бути від\'ємною.')
         return value
+
+    def validate(self, data):
+        # Якщо purchase_price відсутнє (як буває коли фронтенд надсилає лише base_price),
+        # ставимо заглушку 1.00, щоб не впала база даних (бо поле обов'язкове)
+        if 'purchase_price' not in data and not self.instance:
+            data['purchase_price'] = Decimal('1.00')
+        return data
 
     class Meta:
         model = Nomenclature

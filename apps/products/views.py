@@ -30,6 +30,15 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Nomenclature.objects.filter(is_archived=False).order_by('code')
     serializer_class = NomenclatureSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            from orders.models import ExchangeRate
+            context['rates'] = {r.currency: r.rate_to_uah for r in ExchangeRate.objects.all()}
+        except Exception:
+            context['rates'] = {}
+        return context
+
     def get_queryset(self):
         queryset = super().get_queryset()
         params = self.request.query_params

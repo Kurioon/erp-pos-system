@@ -61,6 +61,7 @@ class Order(models.Model):
         null=True,
         related_name='orders'
     )
+    currency = models.CharField(max_length=3, choices=[('UAH', 'UAH'), ('USD', 'USD'), ('EUR', 'EUR')], default='UAH')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -128,6 +129,7 @@ class Transaction(models.Model):
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='UAH')
+    amount_uah = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES)
     timestamp = models.DateTimeField(auto_now_add=True)
 

@@ -15,13 +15,9 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         income_types = ('prepay', 'payment', 'sale', 'income')
         expense_types = ('refund', 'return', 'expense')
 
-        # Транзакції можуть бути в різних валютах — приводимо все до гривні
-        rates = {er.currency: er.rate_to_uah for er in ExchangeRate.objects.all()}
-        rates['UAH'] = Decimal('1')
-
         balance = Decimal('0.00')
         for t in obj.transactions.all():
-            amount_uah = t.amount * rates.get(t.currency, Decimal('1'))
+            amount_uah = t.amount_uah
             if t.transaction_type in income_types:
                 balance += amount_uah
             elif t.transaction_type in expense_types:
@@ -124,7 +120,19 @@ class OrderSerializer(serializers.ModelSerializer):
                         from orders.models import ExchangeRate
                         rates = {r.currency: r.rate_to_uah for r in ExchangeRate.objects.all()}
                         try:
-                            price = product.get_price_uah(rates)
+                            # Задача 7: Снепшот ціни у валюті замовлення
+                            if order.currency == 'UAH':
+                                price = product.get_price_uah(rates)
+                            elif order.currency == 'USD':
+                                price_uah = product.get_price_uah(rates)
+                                rate_usd = rates.get('USD')
+                                price = (price_uah / rate_usd).quantize(Decimal('0.01')) if rate_usd else Decimal('0.00')
+                            elif order.currency == 'EUR':
+                                price_uah = product.get_price_uah(rates)
+                                rate_eur = rates.get('EUR')
+                                price = (price_uah / rate_eur).quantize(Decimal('0.01')) if rate_eur else Decimal('0.00')
+                            else:
+                                price = product.get_price_uah(rates)
                         except Exception:
                             price = product.sale_price or Decimal('0.00')
                     else:
@@ -170,6 +178,12 @@ class TransactionSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             validated_data['user'] = request.user
+            
+        from orders.services import _to_uah
+        amount = validated_data.get('amount', Decimal('0'))
+        currency = validated_data.get('currency', 'UAH')
+        validated_data['amount_uah'] = _to_uah(amount, currency)
+        
         return super().create(validated_data)
 
 

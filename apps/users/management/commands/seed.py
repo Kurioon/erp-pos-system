@@ -3,8 +3,8 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from users.models import CustomUser
 from products.models import Nomenclature, Category
-from warehouses.models import Warehouse, WarehouseStock
-from orders.models import CashRegister, ExchangeRate, Supplier
+from warehouses.models import Warehouse, WarehouseStock, ServiceJob
+from orders.models import CashRegister, ExchangeRate, Supplier, Order, OrderItem
 
 
 class Command(BaseCommand):
@@ -59,8 +59,8 @@ class Command(BaseCommand):
                 cash.save()
             return cash
 
-        ensure_cash('Каса Магазин №1', wh1)
-        ensure_cash('Каса Магазин №2', wh2)
+        cr1 = ensure_cash('Каса Магазин №1', wh1)
+        cr2 = ensure_cash('Каса Магазин №2', wh2)
         self.stdout.write('✓ Каси створені та прив\'язані до правильних складів')
 
         # Курси валют
@@ -102,6 +102,18 @@ class Command(BaseCommand):
             'TAB001': 'Планшети',
             'SPK001': 'Аудіо', 'HP001': 'Аудіо',
             'ANTV001': 'Програмне забезпечення',
+        }
+
+        # Мультивалютна ціна (Задача 3): частина товарів — у валюті.
+        # base_price у валюті; sale_price (грн) порахується автоматично за курсом.
+        # Решта товарів лишаються в грн (стара логіка markup).
+        code_to_base = {
+            'PHN002': ('999.00', 'USD'),   # iPhone — у доларах
+            'PHN001': ('350.00', 'USD'),
+            'NB001': ('500.00', 'USD'),
+            'TAB001': ('650.00', 'USD'),
+            'HP001': ('250.00', 'EUR'),    # навушники — у євро
+            'SPK001': ('90.00', 'EUR'),
         }
 
         # Номенклатура
@@ -151,9 +163,16 @@ class Command(BaseCommand):
             if cat_name and p.category_id is None:
                 p.category = categories[cat_name]
                 p.save()
+            # Мультивалютна ціна (лише якщо ще не задано — ідемпотентність seed)
+            base = code_to_base.get(code)
+            if base and p.base_price is None:
+                p.base_price = Decimal(base[0])
+                p.base_currency = base[1]
+                p.save()  # save() перерахує sale_price у грн за курсом
             created_products.append(p)
 
         self.stdout.write(f'✓ {len(created_products)} товарів створено/знайдено')
+        by_code = {p.code: p for p in created_products}
 
         # Залишки — КОЖЕН товар кладемо на ОБИДВА склади,
         # щоб продаж/повернення можна було тестувати на будь-якій касі.
@@ -166,6 +185,60 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write('✓ Залишки заповнені (усі товари на обох складах по 20 шт)')
+
+        # Демо-ремонти (Задача 6: пристрій = товар з номенклатури)
+        admin_user = CustomUser.objects.filter(email='admin@erp.com').first()
+        repairs_data = [
+            ('Олег Петренко', '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending', 'A1'),
+            ('Ірина Коваль', '+380671112233', 'NB001', 'Не працює частина клавіш на клавіатурі', 'waiting_parts', 'B2'),
+            ('Андрій Сидоренко', '+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля', 'done', None),
+        ]
+        for cust_name, phone, device_code, descr, status, cell in repairs_data:
+            device = by_code.get(device_code)
+            ServiceJob.objects.get_or_create(
+                customer_phone=phone,
+                device_name=device.name if device else 'Невідомий пристрій',
+                defaults={
+                    'customer_name': cust_name,
+                    'device': device,
+                    'description': descr,
+                    'status': status,
+                    'storage_cell': cell,
+                },
+            )
+        self.stdout.write(f'✓ {ServiceJob.objects.count()} ремонтів у базі')
+
+        # Демо-замовлення з валютою (Задача 7): борг ведеться у валюті замовлення.
+        # Створюємо як чернетки (draft) напряму — без FSM/транзакцій, щоб не чіпати касу.
+        def ensure_order(marker, **kwargs):
+            order = Order.objects.filter(comment_ttn=marker).first()
+            if order is None:
+                order = Order.objects.create(comment_ttn=marker, **kwargs)
+            return order
+
+        iphone = by_code.get('PHN002')
+        headphones = by_code.get('HP001')
+        supplier1 = Supplier.objects.filter(name='ТОВ «Техно-Опт»').first()
+
+        if iphone is not None:
+            o_usd = ensure_order(
+                'SEED-RETAIL-USD', order_type='retail', status='draft',
+                currency='USD', user=admin_user, cash_register=cr1,
+            )
+            if not o_usd.items.exists():
+                # Ціна-снепшот у валюті замовлення (USD) = base_price товару
+                OrderItem.objects.create(order=o_usd, product=iphone, quantity=1, price=Decimal('999.00'))
+
+        if headphones is not None:
+            o_eur = ensure_order(
+                'SEED-PURCHASE-EUR', order_type='purchase', status='draft',
+                currency='EUR', user=admin_user, cash_register=cr2, supplier=supplier1,
+            )
+            if not o_eur.items.exists():
+                OrderItem.objects.create(order=o_eur, product=headphones, quantity=2, price=Decimal('250.00'))
+
+        self.stdout.write(f'✓ {Order.objects.count()} замовлень у базі')
+
         self.stdout.write('')
         self.stdout.write('=== Seed завершено ===')
         self.stdout.write('admin@erp.com / admin123')

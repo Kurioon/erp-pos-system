@@ -118,7 +118,15 @@ class OrderSerializer(serializers.ModelSerializer):
                 try:
                     product = Nomenclature.objects.get(pk=product_id)
                     # Визначаємо ціну: роздрібна чи закупівельна залежно від типу замовлення
-                    price = product.sale_price if order.order_type == 'retail' else product.purchase_price
+                    if order.order_type == 'retail':
+                        from orders.models import ExchangeRate
+                        rates = {r.currency: r.rate_to_uah for r in ExchangeRate.objects.all()}
+                        try:
+                            price = product.get_price_uah(rates)
+                        except Exception:
+                            price = product.sale_price or Decimal('0.00')
+                    else:
+                        price = product.purchase_price
                     
                     OrderItem.objects.create(
                         order=order,

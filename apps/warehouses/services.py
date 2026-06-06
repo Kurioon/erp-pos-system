@@ -3,7 +3,7 @@ from .models import StockMovement, WarehouseStock
 
 
 @transaction.atomic
-def add_stock(warehouse, nomenclature, quantity: int, reason='return', order=None):
+def add_stock(warehouse, nomenclature, quantity: int, reason='return', order=None, transfer_warehouse=None):
     if quantity <= 0:
         raise ValueError("Кількість для додавання має бути більшою за нуль.")
 
@@ -26,13 +26,14 @@ def add_stock(warehouse, nomenclature, quantity: int, reason='return', order=Non
         quantity_after=stock.quantity,
         reason=reason,
         order=order,
+        transfer_warehouse=transfer_warehouse
     )
 
     return stock
 
 
 @transaction.atomic
-def remove_stock(warehouse, nomenclature, quantity: int, reason='sale', order=None):
+def remove_stock(warehouse, nomenclature, quantity: int, reason='sale', order=None, transfer_warehouse=None):
     if quantity <= 0:
         raise ValueError("Кількість для списання має бути більшою за нуль.")
 
@@ -62,6 +63,7 @@ def remove_stock(warehouse, nomenclature, quantity: int, reason='sale', order=No
         quantity_after=stock.quantity,
         reason=reason,
         order=order,
+        transfer_warehouse=transfer_warehouse
     )
 
     return stock

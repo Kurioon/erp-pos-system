@@ -10,14 +10,34 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from activity_log.models import ActivityLog
-from users.permissions import IsAdminRole
-from .models import Nomenclature
-from .serializers import NomenclatureSerializer
+from users.permissions import IsAdminRole, IsAdminOrReadOnly
+from .models import Nomenclature, Category
+from .serializers import NomenclatureSerializer, CategorySerializer
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """Довідник категорій товарів.
+
+    Читання — всі авторизовані; створення/зміна/видалення — лише admin.
+    Дубль назви відхиляється на рівні unique-валідації (HTTP 400, поле name).
+    """
+    queryset = Category.objects.all().order_by('name')
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
 
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Nomenclature.objects.filter(is_archived=False).order_by('code')
     serializer_class = NomenclatureSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            from orders.models import ExchangeRate
+            context['rates'] = {r.currency: r.rate_to_uah for r in ExchangeRate.objects.all()}
+        except Exception:
+            context['rates'] = {}
+        return context
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -51,6 +71,12 @@ class ProductViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(sale_price__gte=min_price)
         if max_price := params.get('max_price'):
             queryset = queryset.filter(sale_price__lte=max_price)
+
+        if category_id := params.get('category'):
+            try:
+                queryset = queryset.filter(category_id=int(category_id))
+            except (ValueError, TypeError):
+                pass  # невалідне значення — ігноруємо, не падаємо
 
         return queryset
 

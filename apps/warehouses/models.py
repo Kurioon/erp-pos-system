@@ -29,10 +29,17 @@ class ServiceJob(models.Model):
 
     customer_name = models.CharField(max_length=255)
     customer_phone = models.CharField(max_length=20, validators=[phone_validator])
+    
+    # ДОДАНО (Задача 6): Прив'язка до довідника товарів
+    device = models.ForeignKey('products.Nomenclature', null=True, blank=True, on_delete=models.SET_NULL, related_name='service_jobs')
     device_name = models.CharField(max_length=255)
+    
     description = models.TextField(validators=[MinLengthValidator(5)])
     
-    # ДОДАНО згідно з US-06: Текстовий коментар або номер ТТН (необов'язкове поле)
+    # Орієнтовна вартість ремонту
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    # Додане поле з US-06: Відгук майстра чи коментар (необов'язкове)
     comment = models.TextField(blank=True, null=True)
     
     # ДОДАНО: Фото ремонту через Cloudinary
@@ -66,6 +73,7 @@ class WarehouseStock(models.Model):
     nomenclature = models.ForeignKey('products.Nomenclature', on_delete=models.PROTECT, related_name='warehouse_stocks')
     
     quantity = models.IntegerField(default=0)
+    reserved_quantity = models.IntegerField(default=0)
 
     is_archived = models.BooleanField(default=False)
 
@@ -81,6 +89,7 @@ class StockMovement(models.Model):
         ('purchase', 'Закупівля'),
         ('return', 'Повернення'),
         ('correction', 'Коригування'),
+        ('transfer', 'Переміщення'),
     ]
 
     warehouse = models.ForeignKey('Warehouse', on_delete=models.CASCADE, related_name='movements')
@@ -90,6 +99,10 @@ class StockMovement(models.Model):
     quantity_after = models.IntegerField()
     reason = models.CharField(max_length=20, choices=REASON_CHOICES)
     order = models.ForeignKey('orders.Order', on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Для переміщень між складами зберігаємо другий склад (звідки або куди)
+    transfer_warehouse = models.ForeignKey('Warehouse', on_delete=models.SET_NULL, null=True, blank=True, related_name='transfer_movements')
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

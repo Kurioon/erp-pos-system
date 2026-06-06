@@ -15,13 +15,9 @@ class CashRegisterSerializer(serializers.ModelSerializer):
         income_types = ('prepay', 'payment', 'sale', 'income')
         expense_types = ('refund', 'return', 'expense')
 
-        # Транзакції можуть бути в різних валютах — приводимо все до гривні
-        rates = {er.currency: er.rate_to_uah for er in ExchangeRate.objects.all()}
-        rates['UAH'] = Decimal('1')
-
         balance = Decimal('0.00')
         for t in obj.transactions.all():
-            amount_uah = t.amount * rates.get(t.currency, Decimal('1'))
+            amount_uah = t.amount_uah
             if t.transaction_type in income_types:
                 balance += amount_uah
             elif t.transaction_type in expense_types:
@@ -37,6 +33,8 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
     class Meta:
         model = OrderItem
         fields = '__all__'
@@ -46,6 +44,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     supplier_name = serializers.SerializerMethodField()
+    supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Order
@@ -73,7 +72,13 @@ class OrderSerializer(serializers.ModelSerializer):
         prepay = data.get('prepay_amount', instance.prepay_amount if instance else Decimal('0'))
 
         order_type = data.get('order_type', instance.order_type if instance else None)
+        supplier_name_input = data.pop('supplier_name_input', None)
         supplier = data.get('supplier', instance.supplier if instance else None)
+
+        if supplier_name_input:
+            from .models import Supplier
+            supplier, _ = Supplier.objects.get_or_create(name=supplier_name_input)
+            data['supplier'] = supplier
 
         if order_type == 'retail' and supplier is not None:
             raise serializers.ValidationError(
@@ -118,7 +123,27 @@ class OrderSerializer(serializers.ModelSerializer):
                 try:
                     product = Nomenclature.objects.get(pk=product_id)
                     # Визначаємо ціну: роздрібна чи закупівельна залежно від типу замовлення
-                    price = product.sale_price if order.order_type == 'retail' else product.purchase_price
+                    if order.order_type == 'retail':
+                        from orders.models import ExchangeRate
+                        rates = {r.currency: r.rate_to_uah for r in ExchangeRate.objects.all()}
+                        try:
+                            # Задача 7: Снепшот ціни у валюті замовлення
+                            if order.currency == 'UAH':
+                                price = product.get_price_uah(rates)
+                            elif order.currency == 'USD':
+                                price_uah = product.get_price_uah(rates)
+                                rate_usd = rates.get('USD')
+                                price = (price_uah / rate_usd).quantize(Decimal('0.01')) if rate_usd else Decimal('0.00')
+                            elif order.currency == 'EUR':
+                                price_uah = product.get_price_uah(rates)
+                                rate_eur = rates.get('EUR')
+                                price = (price_uah / rate_eur).quantize(Decimal('0.01')) if rate_eur else Decimal('0.00')
+                            else:
+                                price = product.get_price_uah(rates)
+                        except Exception:
+                            price = product.sale_price or Decimal('0.00')
+                    else:
+                        price = product.purchase_price
                     
                     OrderItem.objects.create(
                         order=order,
@@ -160,6 +185,12 @@ class TransactionSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             validated_data['user'] = request.user
+            
+        from orders.services import _to_uah
+        amount = validated_data.get('amount', Decimal('0'))
+        currency = validated_data.get('currency', 'UAH')
+        validated_data['amount_uah'] = _to_uah(amount, currency)
+        
         return super().create(validated_data)
 
 

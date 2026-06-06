@@ -85,15 +85,31 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         # Пошук по пристрою, клієнту, номеру або опису
         search = params.get('search')
         if search:
-            queryset = queryset.filter(
-                Q(device_name__icontains=search) |
-                Q(customer_name__icontains=search) |
-                Q(customer_phone__icontains=search) |
-                Q(description__icontains=search)
+            import re
+            from django.db.models.functions import LPad, Cast
+            from django.db.models import CharField, Value
+            
+            # Додаємо віртуальне поле formatted_id (наприклад '009' для id=9)
+            queryset = queryset.annotate(
+                formatted_id=LPad(Cast('id', CharField()), 3, Value('0'))
             )
+            
+            query = Q(device_name__icontains=search) | Q(customer_name__icontains=search) | Q(customer_phone__icontains=search) | Q(description__icontains=search)
+            
+            # Підтримка пошуку по ID формату: 15, #15, №15, id15, id 15, R009, R-15
+            match = re.search(r'^(?:#|№|id\s*|r\s*-?\s*)?(\d+)$', search.strip(), re.IGNORECASE)
+            if match:
+                query |= Q(formatted_id__icontains=match.group(1))
+            elif search.isdigit():
+                query |= Q(formatted_id__icontains=search)
+                
+            queryset = queryset.filter(query)
 
         # Сортування по даті
         ordering = params.get('ordering', '-created_at')
+        allowed_ordering = {'created_at', '-created_at', 'id', '-id', 'status', '-status'}
+        if ordering not in allowed_ordering:
+            ordering = '-created_at'
         queryset = queryset.order_by(ordering)
 
         return queryset
@@ -352,12 +368,18 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
         Override queryset to return only non-archived warehouse stocks (is_archived=False).
         ОНОВЛЕНО: Додано select_related для вирішення проблеми N+1 запитів!
         """
-        return WarehouseStock.objects.filter(
+        queryset = WarehouseStock.objects.filter(
             is_archived=False
         ).select_related(
             'warehouse',
             'nomenclature'
         ).order_by('id')  # стабільний порядок — обов'язково для коректної пагінації
+
+        nomenclature_id = self.request.query_params.get('nomenclature')
+        if nomenclature_id:
+            queryset = queryset.filter(nomenclature_id=nomenclature_id)
+
+        return queryset
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -526,8 +548,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
                 warehouse=source_stock.warehouse,
                 nomenclature=source_stock.nomenclature,
                 quantity=quantity,
-                reason='move_out',
-                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+                reason='transfer',
+                order=None,  # Внутрішнє переміщення, не пов'язане з замовленням
+                transfer_warehouse=destination_warehouse
             )
             
             # Додаємо на новий склад
@@ -535,8 +558,9 @@ class WarehouseStockViewSet(viewsets.ModelViewSet):
                 warehouse=destination_warehouse,
                 nomenclature=source_stock.nomenclature,
                 quantity=quantity,
-                reason='move_in',
-                order=None  # Внутрішнє переміщення, не пов'язане з замовленням
+                reason='transfer',
+                order=None,  # Внутрішнє переміщення, не пов'язане з замовленням
+                transfer_warehouse=source_stock.warehouse
             )
             
             ActivityLog.log(self.request.user, 'update', source_stock, 

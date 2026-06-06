@@ -3,7 +3,6 @@ from drf_spectacular.utils import extend_schema_field
 from drf_spectacular.openapi import OpenApiTypes
 from .models import StockMovement, Warehouse, ServiceJob, WarehouseStock
 
-
 class WarehouseSerializer(serializers.ModelSerializer):
     """Serializer for Warehouse model including address field."""
     class Meta:
@@ -16,7 +15,15 @@ class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
     photo = serializers.ImageField(required=False, allow_null=True)
     
-    # ВИДАЛЕНО @extend_schema_field, щоб не було SyntaxError
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from django.apps import apps
+        Nomenclature = apps.get_model('products', 'Nomenclature')
+        self.fields['device'] = serializers.PrimaryKeyRelatedField(
+            queryset=Nomenclature.objects.all(),
+            required=False,
+            allow_null=True
+        )
 
     class Meta:
         model = ServiceJob
@@ -24,8 +31,10 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'id',
             'customer_name',
             'customer_phone',
+            'device',
             'device_name',
             'description',
+            'price',
             'comment',
             'photo',
             'status',
@@ -34,6 +43,9 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'device_name': {'required': False}
+        }
 
     def validate_storage_cell(self, value):
         """
@@ -94,6 +106,12 @@ class ServiceJobSerializer(serializers.ModelSerializer):
         Глобальна валідація об'єкта. 
         Перевіряє, щоб при статусі 'returned' комірка не заповнювалась, і очищає її.
         """
+        # ДОДАНО (Задача 6.1): Автопідстановка device_name
+        if data.get('device'):
+            data['device_name'] = data['device'].name
+        elif not data.get('device_name') and (not self.instance or not self.instance.device_name):
+            raise serializers.ValidationError({"device_name": "Необхідно обрати пристрій зі списку або ввести назву вручну."})
+
         if not self.instance:
             return data
 
@@ -131,10 +149,11 @@ class WarehouseStockSerializer(serializers.ModelSerializer):
 class StockMovementSerializer(serializers.ModelSerializer):
     warehouse = serializers.CharField(source='warehouse.name', read_only=True)
     nomenclature = serializers.CharField(source='nomenclature.name', read_only=True)
+    transfer_warehouse = serializers.CharField(source='transfer_warehouse.name', read_only=True)
 
     class Meta:
         model = StockMovement
         fields = [
             'id', 'warehouse', 'nomenclature', 'quantity_change', 
-            'quantity_before', 'quantity_after', 'reason', 'order', 'created_at'
+            'quantity_before', 'quantity_after', 'reason', 'order', 'transfer_warehouse', 'created_at'
         ]

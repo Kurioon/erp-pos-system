@@ -47,15 +47,15 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     # Сума оплати може бути в USD/EUR — приводимо до гривні для обліку боргу
     amount_uah = _to_uah(amount, currency)
 
-    if amount_uah > order.balance_due:
-        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due} грн.')
+    if amount > order.balance_due:
+        raise ValueError(f'Сума перевищує залишок боргу: {order.balance_due} {order.currency}.')
 
     is_first_payment = order.status == 'draft'
 
     # Якщо оплата покриває весь залишок боргу — це повна оплата ('payment'),
     # інакше часткова ('prepay'). Так у «Фінансах» повна оплата (зокрема
     # дооплата, що закриває борг) не показується як часткова.
-    is_full_payment = amount_uah >= order.balance_due
+    is_full_payment = amount >= order.balance_due
     tx_type = 'payment' if is_full_payment else 'prepay'
 
     # Transaction зберігає фактичну валюту та суму оплати (як пройшло через касу)
@@ -65,10 +65,12 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         user=user,
         amount=amount,
         currency=currency,
+        amount_uah=amount_uah,
         transaction_type=tx_type,
     )
 
-    order.prepay_amount += amount_uah
+    # Всі суми на замовленні ведуться у валюті замовлення (Order.currency)
+    order.prepay_amount += amount
     order.balance_due = order.total_amount - order.prepay_amount
 
     if order.balance_due <= 0:
@@ -91,13 +93,14 @@ def process_cancellation(order: Order, currency: str, cash_register, user):
     t = None
 
     if order.prepay_amount > 0:
-        # prepay_amount накопичено в гривні, тому повернення фіксуємо в UAH
+        # prepay_amount та валюту беремо з замовлення
         t = Transaction.objects.create(
             order=order,
             cash_register=cash_register,
             user=user,
             amount=order.prepay_amount,
-            currency='UAH',
+            currency=order.currency,
+            amount_uah=_to_uah(order.prepay_amount, order.currency),
             transaction_type='refund',
         )
         _return_order_items(order)
@@ -114,14 +117,14 @@ def process_cancellation(order: Order, currency: str, cash_register, user):
 def process_refund(order: Order, currency: str, cash_register, user) -> Transaction:
     _validate_transition(order, 'returned')
 
-    # prepay_amount накопичено в гривні, тому повернення фіксуємо в UAH
-    # (параметр currency лишено для сумісності виклику з view).
+    # prepay_amount та валюту беремо з замовлення
     t = Transaction.objects.create(
         order=order,
         cash_register=cash_register,
         user=user,
         amount=order.prepay_amount,
-        currency='UAH',
+        currency=order.currency,
+        amount_uah=_to_uah(order.prepay_amount, order.currency),
         transaction_type='refund',
     )
 

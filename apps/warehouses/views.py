@@ -16,6 +16,9 @@ from activity_log.models import ActivityLog
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from .models import Warehouse, ServiceJob, WarehouseStock, StockMovement
 from .serializers import WarehouseSerializer, ServiceJobSerializer, WarehouseStockSerializer, StockMovementSerializer
+from orders.models import Transaction, CashRegister
+from orders.services import _to_uah
+from decimal import Decimal
 # helper services for stock operations
 from .services import add_stock, remove_stock
 
@@ -349,6 +352,81 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
         ActivityLog.log(self.request.user, 'delete', instance)
         instance.is_archived = True
         instance.save()
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def pay(self, request, pk=None):
+        """
+        API endpoint to process payment for a service job.
+        Expects: { "amount": "500.00", "currency": "UAH", "cash_register": 1 }
+        """
+        job = self.get_object()
+        
+        amount_str = request.data.get('amount')
+        currency = request.data.get('currency', 'UAH')
+        cash_register_id = request.data.get('cash_register')
+
+        if not amount_str or not cash_register_id:
+            return Response({"error": "amount та cash_register є обов'язковими полями"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            amount = Decimal(str(amount_str))
+            if amount <= 0:
+                raise ValueError
+        except (ValueError, TypeError, Decimal.InvalidOperation):
+            return Response({"error": "Некоректна сума"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            cash_register = CashRegister.objects.get(id=cash_register_id)
+        except CashRegister.DoesNotExist:
+            return Response({"error": "Касу не знайдено"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            amount_uah = _to_uah(amount, currency)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            remaining_balance = max(Decimal('0'), job.price - job.paid_amount)
+            
+            if amount_uah > remaining_balance and remaining_balance > 0:
+                return Response({
+                    "error": f"Сума платежу ({amount_uah} UAH) перевищує залишок до сплати ({remaining_balance} UAH)."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            is_full_payment = amount_uah >= remaining_balance
+            tx_type = 'sale' if is_full_payment else 'prepay'
+
+            # Створення транзакції
+            tx = Transaction.objects.create(
+                # Ми не прив'язуємо до order, оскільки це ServiceJob, але гроші йдуть в касу
+                cash_register=cash_register,
+                user=request.user,
+                amount=amount,
+                currency=currency,
+                amount_uah=amount_uah,  # Спрощено, припускаючи UAH
+                transaction_type=tx_type
+            )
+
+            # Оновлюємо job
+            job.paid_amount += amount_uah
+            job.balance_due = max(Decimal('0'), job.price - job.paid_amount)
+            
+            if job.paid_amount >= job.price and job.price > 0:
+                job.payment_status = 'paid'
+            elif job.paid_amount > 0:
+                job.payment_status = 'partial'
+                
+            job.payment_currency = currency
+            job.cash_register = cash_register
+            job.save(update_fields=['paid_amount', 'balance_due', 'payment_status', 'payment_currency', 'cash_register', 'updated_at'])
+
+        return Response({
+            "job_id": job.id,
+            "payment_status": job.payment_status,
+            "paid_amount": str(job.paid_amount),
+            "balance_due": str(job.balance_due),
+            "transaction_id": tx.id
+        })
 
 
 class WarehouseStockViewSet(viewsets.ModelViewSet):

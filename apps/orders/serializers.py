@@ -216,10 +216,20 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    counterparty = CounterpartyShortSerializer(read_only=True)
+    source_document = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = '__all__'
         read_only_fields = ['user']
+
+    def get_source_document(self, obj):
+        if obj.order:
+            return {'id': obj.order.id, 'type': obj.order.order_type, 'total_amount': obj.order.total_amount}
+        if obj.service_job:
+            return {'id': obj.service_job.id, 'type': 'repair', 'total_amount': obj.service_job.price}
+        return None
 
     def validate_amount(self, value):
         if value <= 0:

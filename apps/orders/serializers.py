@@ -157,9 +157,13 @@ class OrderSerializer(serializers.ModelSerializer):
         
         # 2. Створюємо саме замовлення
         order = super().create(validated_data)
-        
+
+        # B9-1: закупівля → контрагент виступає постачальником (buyer → both)
+        if order.order_type == 'purchase' and order.counterparty:
+            order.counterparty.mark_role('supplier')
+
         # 3. Імпортуємо модель Nomenclature локально для отримання ціни
-        from products.models import Nomenclature 
+        from products.models import Nomenclature
         
         # 4. Створюємо позиції замовлення (OrderItem)
         for item in items_data:

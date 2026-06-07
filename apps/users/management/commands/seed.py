@@ -189,13 +189,13 @@ class Command(BaseCommand):
         # Демо-ремонти (Задача 6: пристрій = товар з номенклатури)
         admin_user = CustomUser.objects.filter(email='admin@erp.com').first()
         repairs_data = [
-            ('Олег Петренко', '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending', 'A1'),
-            ('Ірина Коваль', '+380671112233', 'NB001', 'Не працює частина клавіш на клавіатурі', 'waiting_parts', 'B2'),
-            ('Андрій Сидоренко', '+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля', 'done', None),
+            ('Олег Петренко',   '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending',       'A1',  Decimal('800.00')),
+            ('Ірина Коваль',    '+380671112233', 'NB001',  'Не працює частина клавіш на клавіатурі',     'waiting_parts', 'B2',  Decimal('1500.00')),
+            ('Андрій Сидоренко','+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля',             'done',          None,  Decimal('2200.00')),
         ]
-        for cust_name, phone, device_code, descr, status, cell in repairs_data:
+        for cust_name, phone, device_code, descr, status, cell, price in repairs_data:
             device = by_code.get(device_code)
-            ServiceJob.objects.get_or_create(
+            job, created = ServiceJob.objects.get_or_create(
                 customer_phone=phone,
                 device_name=device.name if device else 'Невідомий пристрій',
                 defaults={
@@ -204,8 +204,16 @@ class Command(BaseCommand):
                     'description': descr,
                     'status': status,
                     'storage_cell': cell,
+                    'price': price,
+                    'balance_due': price,
+                    'payment_status': 'unpaid',
                 },
             )
+            # Оновлюємо ціну якщо запис вже існував з price=0 (ідемпотентність)
+            if not created and job.price == 0:
+                job.price = price
+                job.balance_due = price
+                job.save(update_fields=['price', 'balance_due'])
         self.stdout.write(f'✓ {ServiceJob.objects.count()} ремонтів у базі')
 
         # Демо-замовлення з валютою (Задача 7): борг ведеться у валюті замовлення.

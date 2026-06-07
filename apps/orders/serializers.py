@@ -58,7 +58,7 @@ class OrderSerializer(serializers.ModelSerializer):
         return obj.status == 'paid'
 
     def get_can_view_receipt(self, obj):
-        return obj.status in ('partial', 'paid')
+        return obj.status in ('partial', 'paid', 'returned')
 
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)

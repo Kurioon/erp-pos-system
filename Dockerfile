@@ -22,5 +22,6 @@ RUN SECRET_KEY="dummy_key_for_build" python manage.py collectstatic --noinput
 # Вказуємо порт, який слухатиме контейнер (Render використовує 10000)
 EXPOSE 10000
 
-# Запускаємо Gunicorn. 
-CMD ["sh", "-c", "gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-10000}"]
+# Накочуємо міграції при старті контейнера (env з БД доступні лише в рантаймі),
+# після чого запускаємо Gunicorn.
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-10000}"]

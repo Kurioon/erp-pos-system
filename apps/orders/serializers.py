@@ -133,6 +133,9 @@ class OrderSerializer(serializers.ModelSerializer):
         for item in items_data:
             product_id = item.get('product')
             quantity = item.get('quantity')
+            discount_type = item.get('discount_type')
+            discount_value = item.get('discount_value', Decimal('0'))
+            discount_amount = item.get('discount_amount', Decimal('0'))
             
             if product_id and quantity:
                 try:
@@ -164,7 +167,10 @@ class OrderSerializer(serializers.ModelSerializer):
                         order=order,
                         product=product,
                         quantity=quantity,
-                        price=price
+                        price=price,
+                        discount_type=discount_type,
+                        discount_value=discount_value,
+                        discount_amount=discount_amount
                     )
                 except Nomenclature.DoesNotExist:
                     # Якщо товар з таким ID раптом не знайдено, просто пропускаємо

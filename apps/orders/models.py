@@ -41,6 +41,10 @@ class Order(models.Model):
         ('retail', 'Retail'),
         ('purchase', 'Purchase'),
     ]
+    DISCOUNT_TYPE_CHOICES = [
+        ('percent', 'Percent'),
+        ('amount', 'Amount'),
+    ]
 
     supplier = models.ForeignKey(
         Supplier,
@@ -67,6 +71,11 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     prepay_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    discount_type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES, null=True, blank=True)
+    discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
     comment_ttn = models.TextField(blank=True)
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -84,14 +93,26 @@ class Order(models.Model):
         if self.status != 'draft':
             return
         agg = self.items.aggregate(
-            total=models.Sum(models.F('quantity') * models.F('price'))
+            total=models.Sum(models.F('quantity') * (models.F('price') - models.F('discount_amount')), output_field=models.DecimalField())
         )
         total = agg['total']
         if total is None:
             return
-        self.total_amount = total
-        self.balance_due = total - self.prepay_amount
-        self.save(update_fields=['total_amount', 'balance_due', 'updated_at'])
+            
+        if self.discount_type == 'percent':
+            self.discount_amount = (total * (self.discount_value / Decimal('100'))).quantize(Decimal('0.01'))
+        elif self.discount_type == 'amount':
+            self.discount_amount = self.discount_value
+        else:
+            self.discount_amount = Decimal('0')
+            
+        final_total = total - self.discount_amount
+        if final_total < 0:
+            final_total = Decimal('0')
+
+        self.total_amount = final_total
+        self.balance_due = final_total - self.prepay_amount
+        self.save(update_fields=['total_amount', 'balance_due', 'discount_amount', 'updated_at'])
 
 class Transaction(models.Model):
     TRANSACTION_TYPE_CHOICES = [
@@ -150,6 +171,10 @@ class OrderItem(models.Model):
     )
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     price = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    discount_type = models.CharField(max_length=10, choices=Order.DISCOUNT_TYPE_CHOICES, null=True, blank=True)
+    discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     def __str__(self):
         return f'{self.product.name} x {self.quantity}'

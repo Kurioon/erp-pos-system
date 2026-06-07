@@ -154,9 +154,23 @@ class ServiceJobSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"storage_cell": "При видачі девайсу (статус 'returned') комірка має бути порожньою."}
                 )
-            data['storage_cell'] = None 
-            
+            data['storage_cell'] = None
+
         return data
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        # B9-1: ремонт → контрагент виступає покупцем (supplier → both)
+        if instance.counterparty:
+            instance.counterparty.mark_role('buyer')
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        # B9-1: ремонт → контрагент виступає покупцем (supplier → both)
+        if instance.counterparty:
+            instance.counterparty.mark_role('buyer')
+        return instance
 
 
 class WarehouseStockSerializer(serializers.ModelSerializer):

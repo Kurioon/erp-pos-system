@@ -52,6 +52,24 @@ class Counterparty(models.Model):
     def __str__(self):
         return self.name
 
+    def mark_role(self, acted_as):
+        """B9-1: авто-підвищення ролі до 'both'.
+
+        Якщо контрагент виступив у протилежній до своєї ролі — стає 'both'.
+        acted_as: 'buyer' (часткова оплата/ремонт) або 'supplier' (закупівля).
+        Повертає True, якщо роль змінено.
+        """
+        if self.role == 'both':
+            return False
+        if acted_as == 'supplier' and self.role == 'buyer':
+            self.role = 'both'
+        elif acted_as == 'buyer' and self.role == 'supplier':
+            self.role = 'both'
+        else:
+            return False
+        self.save(update_fields=['role'])
+        return True
+
 
 class Order(models.Model):
     STATUS_CHOICES = [

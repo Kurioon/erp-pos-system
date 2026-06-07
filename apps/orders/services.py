@@ -62,6 +62,10 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
     if not is_full_payment and order.order_type == 'retail' and order.counterparty_id is None:
         raise ValueError('Для часткової оплати потрібно вказати покупця.')
 
+    # B9-1: оплата retail → контрагент виступає покупцем (supplier → both)
+    if order.order_type == 'retail' and order.counterparty:
+        order.counterparty.mark_role('buyer')
+
     # Transaction зберігає фактичну валюту та суму оплати (як пройшло через касу)
     t = Transaction.objects.create(
         order=order,

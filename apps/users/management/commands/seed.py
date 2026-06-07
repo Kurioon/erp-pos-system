@@ -81,21 +81,41 @@ class Command(BaseCommand):
             )
         self.stdout.write('✓ Постачальники створені')
 
-        # Контрагенти (Задача 9): постачальники-дзеркала + покупці + «обидва»
+        # Контрагенти (Задача 9): постачальники-дзеркала + покупці + «обидва».
+        # Усі поля заповнені для гарної демонстрації профілів.
         counterparties_data = [
-            ('ТОВ «Техно-Опт»', '+380441234567', 'sales@techno-opt.ua', 'supplier', ''),
-            ('ФОП Іваненко І.І.', '+380501112233', 'ivanenko@gmail.com', 'supplier', ''),
-            ('ТОВ «Глобал Дистрибуція»', '+380322556677', 'info@globaldist.ua', 'supplier', ''),
-            ('Петренко Олег', '+380671234500', 'oleg.petr@gmail.com', 'buyer', 'Постійний клієнт, дзвонити після 18:00'),
-            ('Коваль Ірина', '+380931112255', '', 'buyer', ''),
-            ('ФОП Мельник М.М.', '+380501239988', 'melnyk@biz.ua', 'both', 'І купує, і постачає аксесуари'),
+            ('ТОВ «Техно-Опт»', '+380441234567', 'sales@techno-opt.ua', 'supplier',
+             'Головний постачальник ноутбуків і моніторів. Відстрочка 14 днів.'),
+            ('ФОП Іваненко І.І.', '+380501112233', 'ivanenko@gmail.com', 'supplier',
+             'Периферія та смартфони. Оплата по факту.'),
+            ('ТОВ «Глобал Дистрибуція»', '+380322556677', 'info@globaldist.ua', 'supplier',
+             'Комплектуючі та аудіо. Працює лише по передоплаті.'),
+            ('Петренко Олег', '+380671234500', 'oleg.petr@gmail.com', 'buyer',
+             'Постійний клієнт, дзвонити після 18:00. Бере техніку в розстрочку.'),
+            ('Коваль Ірина', '+380931112255', 'iryna.koval@ukr.net', 'buyer',
+             'Корпоративний клієнт, потрібні рахунки-фактури.'),
+            ('ФОП Мельник М.М.', '+380501239988', 'melnyk@biz.ua', 'both',
+             'І купує техніку, і постачає аксесуари. Двосторонні розрахунки.'),
+            ('Шевченко Тарас', '+380677778899', 'taras.shev@gmail.com', 'buyer',
+             'Купив ноутбук частинами, є борг.'),
+            ('ТОВ «Сервіс Плюс»', '+380442223344', 'office@servplus.ua', 'both',
+             'Партнер: купує комплектуючі та віддає техніку в ремонт.'),
         ]
         counterparties = {}
         for name, phone, email, role, notes in counterparties_data:
-            cp, _ = Counterparty.objects.get_or_create(
+            cp, created = Counterparty.objects.get_or_create(
                 name=name,
                 defaults={'phone': phone, 'email': email, 'role': role, 'notes': notes}
             )
+            # Ідемпотентно дозаповнюємо порожні поля для наявних записів
+            if not created:
+                changed = []
+                if not cp.email and email:
+                    cp.email = email; changed.append('email')
+                if not cp.notes and notes:
+                    cp.notes = notes; changed.append('notes')
+                if changed:
+                    cp.save(update_fields=changed)
             counterparties[name] = cp
         self.stdout.write(f'✓ {Counterparty.objects.count()} контрагентів створено/знайдено')
 
@@ -206,15 +226,17 @@ class Command(BaseCommand):
 
         # Демо-ремонти (Задача 6: пристрій = товар з номенклатури)
         admin_user = CustomUser.objects.filter(email='admin@erp.com').first()
-        # device_code, ..., counterparty_name (Задача 9: ремонт прив'язаний до покупця)
+        # ..., counterparty_name, paid_amount, payment_status (Задача 9)
         repairs_data = [
-            ('Олег Петренко',   '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending',       'A1',  Decimal('800.00'),  'Петренко Олег'),
-            ('Ірина Коваль',    '+380671112233', 'NB001',  'Не працює частина клавіш на клавіатурі',     'waiting_parts', 'B2',  Decimal('1500.00'), 'Коваль Ірина'),
-            ('Андрій Сидоренко','+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля',             'done',          None,  Decimal('2200.00'), None),
+            ('Олег Петренко',   '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending',       'A1',  Decimal('800.00'),  'Петренко Олег', Decimal('300.00'), 'partial'),
+            ('Ірина Коваль',    '+380671112233', 'NB001',  'Не працює частина клавіш на клавіатурі',     'waiting_parts', 'B2',  Decimal('1500.00'), 'Коваль Ірина',  Decimal('0.00'),   'unpaid'),
+            ('Андрій Сидоренко','+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля',             'done',          'C3',  Decimal('2200.00'), 'ТОВ «Сервіс Плюс»', Decimal('2200.00'), 'paid'),
+            ('Шевченко Тарас',  '+380677778899', 'PHN002', 'Не тримає заряд, заміна батареї',            'pending',       'D4',  Decimal('1200.00'), 'Шевченко Тарас', Decimal('0.00'),   'unpaid'),
         ]
-        for cust_name, phone, device_code, descr, status, cell, price, cp_name in repairs_data:
+        for cust_name, phone, device_code, descr, status, cell, price, cp_name, paid, pay_status in repairs_data:
             device = by_code.get(device_code)
             cp = counterparties.get(cp_name) if cp_name else None
+            balance = price - paid
             job, created = ServiceJob.objects.get_or_create(
                 customer_phone=phone,
                 device_name=device.name if device else 'Невідомий пристрій',
@@ -226,20 +248,20 @@ class Command(BaseCommand):
                     'status': status,
                     'storage_cell': cell,
                     'price': price,
-                    'balance_due': price,
-                    'payment_status': 'unpaid',
+                    'paid_amount': paid,
+                    'balance_due': balance,
+                    'payment_status': pay_status,
                 },
             )
-            # Оновлюємо ціну/контрагента якщо запис вже існував (ідемпотентність)
+            # Оновлюємо ціну/контрагента/оплату якщо запис вже існував (ідемпотентність)
             if not created:
                 changed = []
                 if job.price == 0:
-                    job.price = price
-                    job.balance_due = price
-                    changed += ['price', 'balance_due']
+                    job.price = price; job.balance_due = balance; job.paid_amount = paid
+                    job.payment_status = pay_status
+                    changed += ['price', 'balance_due', 'paid_amount', 'payment_status']
                 if cp and job.counterparty_id is None:
-                    job.counterparty = cp
-                    changed.append('counterparty')
+                    job.counterparty = cp; changed.append('counterparty')
                 if changed:
                     job.save(update_fields=changed)
         self.stdout.write(f'✓ {ServiceJob.objects.count()} ремонтів у базі')
@@ -264,20 +286,34 @@ class Command(BaseCommand):
                 # Ціна-снепшот у валюті замовлення (USD) = base_price товару
                 OrderItem.objects.create(order=o_usd, product=iphone, quantity=1, price=Decimal('999.00'))
 
-        # Задача 9: роздрібне замовлення з частковою оплатою + покупець-контрагент.
-        laptop = by_code.get('NB001')
-        buyer = counterparties.get('Петренко Олег')
-        if laptop is not None and buyer is not None:
-            o_partial = ensure_order(
-                'SEED-RETAIL-PARTIAL', order_type='retail', status='partial',
-                currency='UAH', user=admin_user, cash_register=cr1,
+        # Задача 9: роздрібні замовлення з частковими/повними оплатами + покупці.
+        # marker, currency, status, total, prepay, balance, buyer_name, [(code, qty, price)]
+        retail_demo = [
+            ('SEED-RETAIL-PARTIAL', 'UAH', 'partial', Decimal('30000.00'), Decimal('10000.00'), Decimal('20000.00'),
+             'Петренко Олег', [('NB001', 1, Decimal('30000.00'))]),
+            ('SEED-RETAIL-PAID',    'UAH', 'paid',    Decimal('8500.00'),  Decimal('8500.00'),  Decimal('0.00'),
+             'Петренко Олег', [('MS001', 1, Decimal('3500.00')), ('KB001', 1, Decimal('5000.00'))]),
+            ('SEED-RETAIL-DEBT-2',  'UAH', 'partial', Decimal('45000.00'), Decimal('15000.00'), Decimal('30000.00'),
+             'Шевченко Тарас', [('NB002', 1, Decimal('45000.00'))]),
+            ('SEED-RETAIL-BOTH',    'UAH', 'partial', Decimal('12000.00'), Decimal('4000.00'),  Decimal('8000.00'),
+             'ФОП Мельник М.М.', [('PC001', 1, Decimal('12000.00'))]),
+        ]
+        for marker, cur, st, total, prepay, balance, buyer_name, lines in retail_demo:
+            buyer = counterparties.get(buyer_name)
+            o = ensure_order(
+                marker, order_type='retail', status=st,
+                currency=cur, user=admin_user, cash_register=cr1,
                 counterparty=buyer,
-                total_amount=Decimal('30000.00'),
-                prepay_amount=Decimal('10000.00'),
-                balance_due=Decimal('20000.00'),
+                total_amount=total, prepay_amount=prepay, balance_due=balance,
             )
-            if not o_partial.items.exists():
-                OrderItem.objects.create(order=o_partial, product=laptop, quantity=1, price=Decimal('30000.00'))
+            if buyer and o.counterparty_id is None:
+                o.counterparty = buyer
+                o.save(update_fields=['counterparty'])
+            if not o.items.exists():
+                for code, qty, price in lines:
+                    prod = by_code.get(code)
+                    if prod is not None:
+                        OrderItem.objects.create(order=o, product=prod, quantity=qty, price=price)
 
         # Закупівлі (Задачі 4/5): покривають майже всі товари, розподілені між
         # постачальниками → у кожного товару зʼявляється постачальник
@@ -293,6 +329,9 @@ class Command(BaseCommand):
             ('SEED-PO-4', TO, 'UAH', [('PSU001', 5), ('CBL001', 12), ('BG001', 3)]),
             ('SEED-PO-5', FOP, 'USD', [('PHN001', 2), ('PHN002', 1), ('TAB001', 2)]),
             ('SEED-PO-6', GD, 'EUR', [('SPK001', 3), ('HP001', 2)]),
+            # Задача 9: закупівлі у контрагентів-«обидва» (supplier=None, лише counterparty)
+            ('SEED-PO-7', 'ФОП Мельник М.М.', 'UAH', [('CBL001', 10), ('BG001', 5)]),
+            ('SEED-PO-8', 'ТОВ «Сервіс Плюс»', 'UAH', [('THERM001', 20), ('SCRW001', 15)]),
         ]
         for marker, sup_name, cur, lines in purchase_orders:
             # Задача 9: прив'язуємо і Supplier (legacy), і Counterparty (новий довідник)

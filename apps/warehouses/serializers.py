@@ -16,6 +16,8 @@ class ServiceJobSerializer(serializers.ModelSerializer):
     photo = serializers.ImageField(required=False, allow_null=True)
     # Задача 9: дані контрагента-покупця для переходу в профіль
     counterparty_data = serializers.SerializerMethodField()
+    # Сценарій 2 (Backordering): остання закупівля запчастини під цей ремонт
+    backorder_purchase = serializers.SerializerMethodField()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -39,6 +41,12 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             return None
         return {'id': cp.id, 'name': cp.name, 'phone': cp.phone, 'role': cp.role}
 
+    def get_backorder_purchase(self, obj):
+        po = obj.backorder_purchases.order_by('-created_at').first()
+        if not po:
+            return None
+        return {'id': po.id, 'status': po.status}
+
     class Meta:
         model = ServiceJob
         fields = [
@@ -47,6 +55,7 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'customer_phone',
             'counterparty',
             'counterparty_data',
+            'backorder_purchase',
             'device',
             'device_name',
             'description',

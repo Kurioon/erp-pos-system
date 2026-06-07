@@ -129,6 +129,24 @@ class Order(models.Model):
 
     comment_ttn = models.TextField(blank=True)
     is_archived = models.BooleanField(default=False)
+
+    # Сценарій 2 (Backordering): закупівля під конкретне джерело.
+    # Заповнюється лише для order_type='purchase'; одночасно лише одне з двох.
+    related_retail_order = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='backorder_purchases'
+    )
+    related_service_job = models.ForeignKey(
+        'warehouses.ServiceJob',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='backorder_purchases'
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

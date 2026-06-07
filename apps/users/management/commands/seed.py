@@ -354,6 +354,54 @@ class Command(BaseCommand):
                     price = prod.purchase_price if cur == 'UAH' else (prod.base_price or prod.purchase_price)
                     OrderItem.objects.create(order=order, product=prod, quantity=qty, price=price)
 
+        # Сценарій 2 (Backordering): демо «замовлення під клієнта / ремонт»
+        supplier_cp = counterparties.get('ТОВ «Техно-Опт»')
+
+        def ensure_backorder(marker, status, related_retail=None, related_sj=None, line=None):
+            order = Order.objects.filter(comment_ttn=marker).first()
+            if order is None:
+                order = Order.objects.create(
+                    comment_ttn=marker, order_type='purchase', status=status,
+                    currency='UAH', user=admin_user, cash_register=cr1,
+                    counterparty=supplier_cp,
+                    related_retail_order=related_retail,
+                    related_service_job=related_sj,
+                )
+            if not order.items.exists() and line is not None:
+                prod, qty = line
+                if prod:
+                    OrderItem.objects.create(order=order, product=prod, quantity=qty, price=prod.purchase_price)
+            return order
+
+        part1 = by_code.get('RAM001')
+        part2 = by_code.get('HDD001')
+
+        # 1) Ремонт очікує запчастину (закупівля draft → жовтий алерт)
+        job_waiting = ServiceJob.objects.filter(customer_phone='+380671112233').first()
+        if job_waiting and part1 and supplier_cp:
+            ensure_backorder('SEED-BO-REPAIR-1', 'draft', related_sj=job_waiting, line=(part1, 1))
+
+        # 2) Ремонт — запчастина приїхала (закупівля paid → зелений алерт)
+        job_arrived = ServiceJob.objects.filter(customer_phone='+380677778899').first()
+        if job_arrived and part2 and supplier_cp:
+            ensure_backorder('SEED-BO-REPAIR-2', 'paid', related_sj=job_arrived, line=(part2, 1))
+
+        # 3) Роздрібне замовлення під клієнта + прив'язана закупівля (draft → жовтий)
+        buyer_cp = counterparties.get('Коваль Ірина')
+        laptop2 = by_code.get('NB002')
+        if buyer_cp and laptop2 and supplier_cp:
+            deferred = Order.objects.filter(comment_ttn='SEED-BO-RETAIL').first()
+            if deferred is None:
+                deferred = Order.objects.create(
+                    comment_ttn='SEED-BO-RETAIL', order_type='retail', status='draft',
+                    currency='UAH', user=admin_user, cash_register=cr1, counterparty=buyer_cp,
+                )
+            if not deferred.items.exists():
+                OrderItem.objects.create(order=deferred, product=laptop2, quantity=1, price=laptop2.sale_price)
+            ensure_backorder('SEED-BO-RETAIL-PO', 'draft', related_retail=deferred, line=(laptop2, 1))
+
+        self.stdout.write('✓ Backorder-демо створено (2 ремонти + 1 замовлення під клієнта)')
+
         purchases = Order.objects.filter(order_type='purchase').count()
         with_supplier = Nomenclature.objects.filter(
             order_items__order__order_type='purchase',

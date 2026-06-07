@@ -35,6 +35,11 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'device_name',
             'description',
             'price',
+            'payment_status',
+            'paid_amount',
+            'balance_due',
+            'payment_currency',
+            'cash_register',
             'comment',
             'photo',
             'status',
@@ -42,7 +47,7 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'payment_status', 'paid_amount', 'balance_due', 'payment_currency', 'cash_register']
         extra_kwargs = {
             'device_name': {'required': False}
         }

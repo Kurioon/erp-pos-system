@@ -29,7 +29,13 @@ class ServiceJob(models.Model):
 
     customer_name = models.CharField(max_length=255)
     customer_phone = models.CharField(max_length=20, validators=[phone_validator])
-    
+
+    # Задача 9: прив'язка ремонту до контрагента-покупця (необов'язково)
+    counterparty = models.ForeignKey(
+        'orders.Counterparty', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='service_jobs'
+    )
+
     # ДОДАНО (Задача 6): Прив'язка до довідника товарів
     device = models.ForeignKey('products.Nomenclature', null=True, blank=True, on_delete=models.SET_NULL, related_name='service_jobs')
     device_name = models.CharField(max_length=255)

@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier, Counterparty
 
 
 class CashRegisterSerializer(serializers.ModelSerializer):
@@ -32,6 +32,31 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CounterpartySerializer(serializers.ModelSerializer):
+    """Повний серіалізатор контрагента (Задача 9)."""
+    class Meta:
+        model = Counterparty
+        fields = ['id', 'name', 'phone', 'email', 'role', 'notes', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Ім'я обов'язкове.")
+        return value.strip()
+
+    def validate_phone(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Телефон обов\'язковий.')
+        return value.strip()
+
+
+class CounterpartyShortSerializer(serializers.ModelSerializer):
+    """Стислий серіалізатор для вбудовування в Order/ServiceJob."""
+    class Meta:
+        model = Counterparty
+        fields = ['id', 'name', 'phone', 'role']
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
 
@@ -47,6 +72,8 @@ class OrderSerializer(serializers.ModelSerializer):
     supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
     can_refund = serializers.SerializerMethodField()
     can_view_receipt = serializers.SerializerMethodField()
+    # Задача 9: дані контрагента (покупця/постачальника) для переходу в профіль
+    counterparty_data = CounterpartyShortSerializer(source='counterparty', read_only=True)
 
     class Meta:
         model = Order
@@ -62,7 +89,12 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)
-        return obj.supplier.name if obj.supplier else None
+        if obj.supplier:
+            return obj.supplier.name
+        # Задача 9: для закупівлі підхоплюємо назву з контрагента
+        if obj.order_type == 'purchase' and obj.counterparty:
+            return obj.counterparty.name
+        return None
 
     def validate_total_amount(self, value):
         instance = self.instance

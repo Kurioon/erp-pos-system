@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from users.models import CustomUser
 from products.models import Nomenclature, Category
 from warehouses.models import Warehouse, WarehouseStock, ServiceJob
-from orders.models import CashRegister, ExchangeRate, Supplier, Order, OrderItem
+from orders.models import CashRegister, ExchangeRate, Supplier, Order, OrderItem, Counterparty
 
 
 class Command(BaseCommand):
@@ -80,6 +80,24 @@ class Command(BaseCommand):
                 defaults={'phone': phone, 'email': email, 'address': address}
             )
         self.stdout.write('✓ Постачальники створені')
+
+        # Контрагенти (Задача 9): постачальники-дзеркала + покупці + «обидва»
+        counterparties_data = [
+            ('ТОВ «Техно-Опт»', '+380441234567', 'sales@techno-opt.ua', 'supplier', ''),
+            ('ФОП Іваненко І.І.', '+380501112233', 'ivanenko@gmail.com', 'supplier', ''),
+            ('ТОВ «Глобал Дистрибуція»', '+380322556677', 'info@globaldist.ua', 'supplier', ''),
+            ('Петренко Олег', '+380671234500', 'oleg.petr@gmail.com', 'buyer', 'Постійний клієнт, дзвонити після 18:00'),
+            ('Коваль Ірина', '+380931112255', '', 'buyer', ''),
+            ('ФОП Мельник М.М.', '+380501239988', 'melnyk@biz.ua', 'both', 'І купує, і постачає аксесуари'),
+        ]
+        counterparties = {}
+        for name, phone, email, role, notes in counterparties_data:
+            cp, _ = Counterparty.objects.get_or_create(
+                name=name,
+                defaults={'phone': phone, 'email': email, 'role': role, 'notes': notes}
+            )
+            counterparties[name] = cp
+        self.stdout.write(f'✓ {Counterparty.objects.count()} контрагентів створено/знайдено')
 
         # Категорії товарів
         category_names = [
@@ -188,18 +206,21 @@ class Command(BaseCommand):
 
         # Демо-ремонти (Задача 6: пристрій = товар з номенклатури)
         admin_user = CustomUser.objects.filter(email='admin@erp.com').first()
+        # device_code, ..., counterparty_name (Задача 9: ремонт прив'язаний до покупця)
         repairs_data = [
-            ('Олег Петренко',   '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending',       'A1',  Decimal('800.00')),
-            ('Ірина Коваль',    '+380671112233', 'NB001',  'Не працює частина клавіш на клавіатурі',     'waiting_parts', 'B2',  Decimal('1500.00')),
-            ('Андрій Сидоренко','+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля',             'done',          None,  Decimal('2200.00')),
+            ('Олег Петренко',   '+380501234567', 'PHN001', 'Не вмикається, потрібна заміна акумулятора', 'pending',       'A1',  Decimal('800.00'),  'Петренко Олег'),
+            ('Ірина Коваль',    '+380671112233', 'NB001',  'Не працює частина клавіш на клавіатурі',     'waiting_parts', 'B2',  Decimal('1500.00'), 'Коваль Ірина'),
+            ('Андрій Сидоренко','+380931114455', 'TAB001', 'Тріснутий екран, заміна модуля',             'done',          None,  Decimal('2200.00'), None),
         ]
-        for cust_name, phone, device_code, descr, status, cell, price in repairs_data:
+        for cust_name, phone, device_code, descr, status, cell, price, cp_name in repairs_data:
             device = by_code.get(device_code)
+            cp = counterparties.get(cp_name) if cp_name else None
             job, created = ServiceJob.objects.get_or_create(
                 customer_phone=phone,
                 device_name=device.name if device else 'Невідомий пристрій',
                 defaults={
                     'customer_name': cust_name,
+                    'counterparty': cp,
                     'device': device,
                     'description': descr,
                     'status': status,
@@ -209,11 +230,18 @@ class Command(BaseCommand):
                     'payment_status': 'unpaid',
                 },
             )
-            # Оновлюємо ціну якщо запис вже існував з price=0 (ідемпотентність)
-            if not created and job.price == 0:
-                job.price = price
-                job.balance_due = price
-                job.save(update_fields=['price', 'balance_due'])
+            # Оновлюємо ціну/контрагента якщо запис вже існував (ідемпотентність)
+            if not created:
+                changed = []
+                if job.price == 0:
+                    job.price = price
+                    job.balance_due = price
+                    changed += ['price', 'balance_due']
+                if cp and job.counterparty_id is None:
+                    job.counterparty = cp
+                    changed.append('counterparty')
+                if changed:
+                    job.save(update_fields=changed)
         self.stdout.write(f'✓ {ServiceJob.objects.count()} ремонтів у базі')
 
         # Демо-замовлення з валютою (Задача 7): борг ведеться у валюті замовлення.
@@ -236,6 +264,21 @@ class Command(BaseCommand):
                 # Ціна-снепшот у валюті замовлення (USD) = base_price товару
                 OrderItem.objects.create(order=o_usd, product=iphone, quantity=1, price=Decimal('999.00'))
 
+        # Задача 9: роздрібне замовлення з частковою оплатою + покупець-контрагент.
+        laptop = by_code.get('NB001')
+        buyer = counterparties.get('Петренко Олег')
+        if laptop is not None and buyer is not None:
+            o_partial = ensure_order(
+                'SEED-RETAIL-PARTIAL', order_type='retail', status='partial',
+                currency='UAH', user=admin_user, cash_register=cr1,
+                counterparty=buyer,
+                total_amount=Decimal('30000.00'),
+                prepay_amount=Decimal('10000.00'),
+                balance_due=Decimal('20000.00'),
+            )
+            if not o_partial.items.exists():
+                OrderItem.objects.create(order=o_partial, product=laptop, quantity=1, price=Decimal('30000.00'))
+
         # Закупівлі (Задачі 4/5): покривають майже всі товари, розподілені між
         # постачальниками → у кожного товару зʼявляється постачальник
         # (supplier_name береться з останньої закупівлі, що містить товар).
@@ -252,10 +295,16 @@ class Command(BaseCommand):
             ('SEED-PO-6', GD, 'EUR', [('SPK001', 3), ('HP001', 2)]),
         ]
         for marker, sup_name, cur, lines in purchase_orders:
+            # Задача 9: прив'язуємо і Supplier (legacy), і Counterparty (новий довідник)
             order = ensure_order(
                 marker, order_type='purchase', status='draft', currency=cur,
                 user=admin_user, cash_register=cr1, supplier=suppliers.get(sup_name),
+                counterparty=counterparties.get(sup_name),
             )
+            # Ідемпотентність: проставити контрагента наявним закупівлям
+            if order.counterparty_id is None and counterparties.get(sup_name):
+                order.counterparty = counterparties.get(sup_name)
+                order.save(update_fields=['counterparty'])
             if not order.items.exists():
                 for code, qty in lines:
                     prod = by_code.get(code)

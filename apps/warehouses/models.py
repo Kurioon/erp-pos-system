@@ -39,6 +39,25 @@ class ServiceJob(models.Model):
     # Орієнтовна вартість ремонту
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     
+    payment_status = models.CharField(
+        max_length=10, 
+        choices=[('unpaid','Не оплачено'),('partial','Частково'),('paid','Оплачено')], 
+        default='unpaid'
+    )
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_currency = models.CharField(
+        max_length=3, 
+        choices=[('UAH','UAH'),('USD','USD'),('EUR','EUR')], 
+        default='UAH'
+    )
+    cash_register = models.ForeignKey(
+        'orders.CashRegister', 
+        null=True, blank=True, 
+        on_delete=models.SET_NULL,
+        related_name='service_jobs'
+    )
+    
     # Додане поле з US-06: Відгук майстра чи коментар (необов'язкове)
     comment = models.TextField(blank=True, null=True)
     

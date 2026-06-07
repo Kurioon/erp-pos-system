@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/health/', health_check, name='health_check'),
 
     path('api/auth/', include('users.urls', namespace='auth')),
+    path('api/users/', include('users.user_urls')),
 
     # Підключаємо твої маршрути під префіксом /api/
     path('api/', include('orders.urls')),

@@ -222,6 +222,10 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         if transaction_type:
             queryset = queryset.filter(transaction_type=transaction_type)
 
+        date_filter = self.request.query_params.get('date')
+        if date_filter:
+            queryset = queryset.filter(timestamp__date=date_filter)
+
         return queryset
 
     # BUG-03 — обмеження на створення транзакцій
@@ -538,6 +542,7 @@ class OrderReceiveView(APIView):
             return Response({'error': 'Склад не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            from orders.services import process_receive
             process_receive(order, warehouse, request.user)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -561,7 +566,7 @@ class OrderReceiptPDFView(APIView):
         # BUG-07 — перевірка власника
         # Чек доступний для замовлень, де вже була оплата (partial або paid).
         user = request.user
-        paid_statuses = ['partial', 'paid']
+        paid_statuses = ['partial', 'paid', 'returned']
         try:
             if hasattr(user, 'role') and user.role == 'admin':
                 order = Order.objects.get(pk=pk, status__in=paid_statuses)
@@ -579,26 +584,48 @@ class OrderReceiptPDFView(APIView):
         p.setFont('DejaVu', 16)
         p.drawString(50, 800, f'Receipt — Order #{order.id}')
         p.setFont('DejaVu', 12)
-        p.drawString(50, 770, f'Status: {order.status}')
-        p.drawString(50, 750, f'Type: {order.order_type}')
-        p.drawString(50, 730, f'Total: {order.total_amount} {order.currency}')
-        p.drawString(50, 710, f'Paid: {order.prepay_amount} {order.currency}')
-        p.drawString(50, 690, f'Balance due: {order.balance_due} {order.currency}')
-        p.drawString(50, 670, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
+        
+        y = 770
+        p.drawString(50, y, f'Status: {order.status}')
+        y -= 20
+        p.drawString(50, y, f'Type: {order.order_type}')
+        y -= 20
+        
+        if order.discount_amount > 0:
+            p.drawString(50, y, f'Order Discount: -{order.discount_amount} {order.currency}')
+            y -= 20
+            
+        p.drawString(50, y, f'Total: {order.total_amount} {order.currency}')
+        y -= 20
+        p.drawString(50, y, f'Paid: {order.prepay_amount} {order.currency}')
+        y -= 20
+        p.drawString(50, y, f'Balance due: {order.balance_due} {order.currency}')
+        y -= 20
+        p.drawString(50, y, f'Date: {order.created_at.strftime("%Y-%m-%d %H:%M")}')
+        y -= 30
 
         p.setFont('DejaVu', 12)
-        p.drawString(50, 640, 'Items:')
+        p.drawString(50, y, 'Items:')
+        y -= 20
 
-        y = 620
         p.setFont('DejaVu', 11)
         for item in order.items.select_related('product').all():
             line = f'{item.product.name}  x{item.quantity}  @ {item.price} {order.currency}  = {item.quantity * item.price} {order.currency}'
             p.drawString(60, y, line)
             y -= 20
+            
+            if getattr(item, 'discount_amount', 0) > 0:
+                disc_line = f'Discount: -{item.discount_amount * item.quantity} {order.currency}'
+                p.drawString(80, y, disc_line)
+                y -= 20
+                final_line = f'Final: {item.quantity * (item.price - item.discount_amount)} {order.currency}'
+                p.drawString(80, y, final_line)
+                y -= 20
+                
             if y < 50:
                 p.showPage()
-                y = 800
                 p.setFont('DejaVu', 11)
+                y = 800
 
         p.showPage()
         p.save()

@@ -45,6 +45,8 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     supplier_name = serializers.SerializerMethodField()
     supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
+    can_refund = serializers.SerializerMethodField()
+    can_view_receipt = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -52,11 +54,24 @@ class OrderSerializer(serializers.ModelSerializer):
         # user проставляється автоматично з request (автор замовлення)
         read_only_fields = ['balance_due', 'status', 'user']
 
+    def get_can_refund(self, obj):
+        return obj.status == 'paid'
+
+    def get_can_view_receipt(self, obj):
+        return obj.status in ('partial', 'paid', 'returned')
+
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)
         return obj.supplier.name if obj.supplier else None
 
     def validate_total_amount(self, value):
+        instance = self.instance
+        order_type = self.initial_data.get('order_type', instance.order_type if instance else None)
+        
+        # Дозволяємо суму 0 для порожніх чернеток закупівель
+        if order_type == 'purchase' and value == 0:
+            return value
+            
         if value <= 0:
             raise serializers.ValidationError('Загальна сума повинна бути більше нуля.')
         return value
@@ -118,6 +133,9 @@ class OrderSerializer(serializers.ModelSerializer):
         for item in items_data:
             product_id = item.get('product')
             quantity = item.get('quantity')
+            discount_type = item.get('discount_type')
+            discount_value = item.get('discount_value', Decimal('0'))
+            discount_amount = item.get('discount_amount', Decimal('0'))
             
             if product_id and quantity:
                 try:
@@ -149,7 +167,10 @@ class OrderSerializer(serializers.ModelSerializer):
                         order=order,
                         product=product,
                         quantity=quantity,
-                        price=price
+                        price=price,
+                        discount_type=discount_type,
+                        discount_value=discount_value,
+                        discount_amount=discount_amount
                     )
                 except Nomenclature.DoesNotExist:
                     # Якщо товар з таким ID раптом не знайдено, просто пропускаємо

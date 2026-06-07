@@ -106,16 +106,21 @@ class ServiceJobSerializer(serializers.ModelSerializer):
 
         return new_status
 
+    def validate_price(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Орієнтовна вартість повинна бути більшою за нуль.")
+        return value
+
     def validate(self, data):
         """
-        Глобальна валідація об'єкта. 
-        Перевіряє, щоб при статусі 'returned' комірка не заповнювалась, і очищає її.
+        Глобальна валідація об'єкту. 
+        Наприклад, щоб при статусі 'returned' комірка була очищена, а девайс видано.
         """
-        # ДОДАНО (Задача 6.1): Автопідстановка device_name
+        # Правило (зверху 6.1): заповнювати device_name
         if data.get('device'):
             data['device_name'] = data['device'].name
         elif not data.get('device_name') and (not self.instance or not self.instance.device_name):
-            raise serializers.ValidationError({"device_name": "Необхідно обрати пристрій зі списку або ввести назву вручну."})
+            raise serializers.ValidationError({"device_name": "Необхідно обрати пристрій із бази або ввести вручну."})
 
         if not self.instance:
             return data
@@ -123,10 +128,15 @@ class ServiceJobSerializer(serializers.ModelSerializer):
         new_status = data.get('status', self.instance.status)
         
         if new_status == 'returned':
-            # Замість "мовчазного" очищення, сваримося, якщо юзер передав комірку
+            # Перевіряємо чи оплачений ремонт
+            payment_status = data.get('payment_status', self.instance.payment_status)
+            if payment_status in ['unpaid', 'partial']:
+                raise serializers.ValidationError({"status": "Не можна видати пристрій (статус 'returned'), якщо ремонт не оплачений повністю."})
+
+            # Логіка очищення комірки
             if data.get('storage_cell'):
                 raise serializers.ValidationError(
-                    {"storage_cell": "При видачі пристрою (статус 'returned') комірка має бути порожньою."}
+                    {"storage_cell": "При видачі девайсу (статус 'returned') комірка має бути порожньою."}
                 )
             data['storage_cell'] = None 
             

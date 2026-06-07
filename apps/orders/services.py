@@ -75,17 +75,52 @@ def process_prepay(order: Order, amount: Decimal, currency: str, cash_register, 
         currency=currency,
         amount_uah=amount_uah,
         transaction_type=tx_type,
+        status='completed',
+        counterparty=order.counterparty
     )
 
     # Всі суми на замовленні ведуться у валюті замовлення (Order.currency)
     order.prepay_amount += amount
     order.balance_due = order.total_amount - order.prepay_amount
 
+    # Знаходимо існуючу боргову транзакцію
+    debt_tx = Transaction.objects.filter(
+        order=order, 
+        transaction_type='debt', 
+        status='pending'
+    ).first()
+
     if order.balance_due <= 0:
         order.balance_due = Decimal('0.00')
         order.status = 'paid'
+        
+        # Закриваємо борг, якщо він був
+        if debt_tx:
+            debt_tx.status = 'completed'
+            # При повному погашенні обнуляємо суму боргу, щоб він не висів як актуальний
+            debt_tx.amount = Decimal('0.00')
+            debt_tx.amount_uah = Decimal('0.00')
+            debt_tx.save()
     else:
         order.status = 'partial'
+        
+        # Створюємо або оновлюємо транзакцію боргу
+        if debt_tx:
+            debt_tx.amount = order.balance_due
+            debt_tx.amount_uah = _to_uah(order.balance_due, order.currency)
+            debt_tx.save()
+        else:
+            Transaction.objects.create(
+                order=order,
+                cash_register=cash_register,
+                user=user,
+                amount=order.balance_due,
+                currency=order.currency,
+                amount_uah=_to_uah(order.balance_due, order.currency),
+                transaction_type='debt',
+                status='pending',
+                counterparty=order.counterparty
+            )
 
     if is_first_payment:
         _deduct_order_items(order)
@@ -113,6 +148,14 @@ def process_cancellation(order: Order, currency: str, cash_register, user):
         )
         _return_order_items(order)
 
+    # Закриваємо борг, якщо був
+    debt_tx = Transaction.objects.filter(order=order, transaction_type='debt', status='pending').first()
+    if debt_tx:
+        debt_tx.status = 'completed'
+        debt_tx.amount = Decimal('0.00')
+        debt_tx.amount_uah = Decimal('0.00')
+        debt_tx.save()
+
     order.status = 'cancelled'
     order.balance_due = Decimal('0.00')
     order.prepay_amount = Decimal('0.00')
@@ -137,6 +180,14 @@ def process_refund(order: Order, currency: str, cash_register, user) -> Transact
     )
 
     _return_order_items(order)
+
+    # Закриваємо борг, якщо був
+    debt_tx = Transaction.objects.filter(order=order, transaction_type='debt', status='pending').first()
+    if debt_tx:
+        debt_tx.status = 'completed'
+        debt_tx.amount = Decimal('0.00')
+        debt_tx.amount_uah = Decimal('0.00')
+        debt_tx.save()
 
     order.status = 'returned'
     order.balance_due = Decimal('0.00')

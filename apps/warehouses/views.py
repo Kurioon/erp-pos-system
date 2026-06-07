@@ -398,23 +398,55 @@ class ServiceJobViewSet(viewsets.ModelViewSet):
 
             # Створення транзакції
             tx = Transaction.objects.create(
-                # Ми не прив'язуємо до order, оскільки це ServiceJob, але гроші йдуть в касу
+                service_job=job,
                 cash_register=cash_register,
                 user=request.user,
                 amount=amount,
                 currency=currency,
-                amount_uah=amount_uah,  # Спрощено, припускаючи UAH
-                transaction_type=tx_type
+                amount_uah=amount_uah,
+                transaction_type=tx_type,
+                status='completed',
+                counterparty=job.counterparty
             )
 
             # Оновлюємо job
             job.paid_amount += amount_uah
             job.balance_due = max(Decimal('0'), job.price - job.paid_amount)
             
+            # Знаходимо існуючу боргову транзакцію
+            debt_tx = Transaction.objects.filter(
+                service_job=job, 
+                transaction_type='debt', 
+                status='pending'
+            ).first()
+
             if job.paid_amount >= job.price and job.price > 0:
                 job.payment_status = 'paid'
+                # Закриваємо борг, якщо він був
+                if debt_tx:
+                    debt_tx.status = 'completed'
+                    debt_tx.amount = Decimal('0.00')
+                    debt_tx.amount_uah = Decimal('0.00')
+                    debt_tx.save()
             elif job.paid_amount > 0:
                 job.payment_status = 'partial'
+                # Оновлюємо або створюємо борг
+                if debt_tx:
+                    debt_tx.amount = job.balance_due
+                    debt_tx.amount_uah = job.balance_due # assuming UAH
+                    debt_tx.save()
+                else:
+                    Transaction.objects.create(
+                        service_job=job,
+                        cash_register=cash_register,
+                        user=request.user,
+                        amount=job.balance_due,
+                        currency='UAH',
+                        amount_uah=job.balance_due,
+                        transaction_type='debt',
+                        status='pending',
+                        counterparty=job.counterparty
+                    )
                 
             job.payment_currency = currency
             job.cash_register = cash_register

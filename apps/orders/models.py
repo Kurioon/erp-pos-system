@@ -174,6 +174,7 @@ class Transaction(models.Model):
         ('income', 'Внесення'),
         ('expense', 'Видача'),
         ('return', 'Повернення товару'),
+        ('debt', 'Борг'),
     ]
     CURRENCY_CHOICES = [
         ('UAH', 'UAH'),
@@ -203,6 +204,24 @@ class Transaction(models.Model):
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='UAH')
     amount_uah = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES)
+    
+    # --- New fields for Debt tracking ---
+    status = models.CharField(max_length=20, choices=[('completed', 'Виконано'), ('pending', 'Очікує оплати')], default='completed')
+    counterparty = models.ForeignKey(
+        'Counterparty',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions'
+    )
+    service_job = models.ForeignKey(
+        'warehouses.ServiceJob',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='transactions'
+    )
+
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -29,6 +29,48 @@ class Supplier(models.Model):
         return self.name
 
 
+class Counterparty(models.Model):
+    """Єдиний довідник контрагентів (Задача 9).
+
+    Одна людина/компанія може бути водночас покупцем і постачальником (role='both').
+    Покупець прив'язується до роздрібного замовлення при частковій оплаті та до ремонту;
+    постачальник — до закупівлі.
+    """
+    ROLE_CHOICES = [
+        ('buyer', 'Покупець'),
+        ('supplier', 'Постачальник'),
+        ('both', 'Обидва'),
+    ]
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='buyer')
+    notes = models.TextField(blank=True)
+    is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    def mark_role(self, acted_as):
+        """B9-1: авто-підвищення ролі до 'both'.
+
+        Якщо контрагент виступив у протилежній до своєї ролі — стає 'both'.
+        acted_as: 'buyer' (часткова оплата/ремонт) або 'supplier' (закупівля).
+        Повертає True, якщо роль змінено.
+        """
+        if self.role == 'both':
+            return False
+        if acted_as == 'supplier' and self.role == 'buyer':
+            self.role = 'both'
+        elif acted_as == 'buyer' and self.role == 'supplier':
+            self.role = 'both'
+        else:
+            return False
+        self.save(update_fields=['role'])
+        return True
+
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -48,6 +90,15 @@ class Order(models.Model):
 
     supplier = models.ForeignKey(
         Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders'
+    )
+    # Задача 9: єдиний контрагент. Для retail (часткова оплата) — покупець,
+    # для purchase — постачальник. supplier лишаємо для зворотної сумісності.
+    counterparty = models.ForeignKey(
+        'Counterparty',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -78,6 +129,24 @@ class Order(models.Model):
 
     comment_ttn = models.TextField(blank=True)
     is_archived = models.BooleanField(default=False)
+
+    # Сценарій 2 (Backordering): закупівля під конкретне джерело.
+    # Заповнюється лише для order_type='purchase'; одночасно лише одне з двох.
+    related_retail_order = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='backorder_purchases'
+    )
+    related_service_job = models.ForeignKey(
+        'warehouses.ServiceJob',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='backorder_purchases'
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -123,6 +192,7 @@ class Transaction(models.Model):
         ('income', 'Внесення'),
         ('expense', 'Видача'),
         ('return', 'Повернення товару'),
+        ('debt', 'Борг'),
     ]
     CURRENCY_CHOICES = [
         ('UAH', 'UAH'),
@@ -152,6 +222,24 @@ class Transaction(models.Model):
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='UAH')
     amount_uah = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES)
+    
+    # --- New fields for Debt tracking ---
+    status = models.CharField(max_length=20, choices=[('completed', 'Виконано'), ('pending', 'Очікує оплати')], default='completed')
+    counterparty = models.ForeignKey(
+        'Counterparty',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions'
+    )
+    service_job = models.ForeignKey(
+        'warehouses.ServiceJob',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='transactions'
+    )
+
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

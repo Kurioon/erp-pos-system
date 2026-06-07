@@ -17,15 +17,29 @@ from .views import (
     OrderCancelView,
     OrderReceiveView,
     OrderReceiptPDFView,
-    ExchangeRateListView,       
+    ExchangeRateListView,
     ExchangeRateUpdateView,
-    SupplierListCreateView,     
-    SupplierDetailView      
+    SupplierListCreateView,
+    SupplierDetailView,
+    CounterpartyListCreateView,
+    CounterpartyDetailView,
+    CounterpartyOrdersView,
+    CounterpartyServiceJobsView,
+    CounterpartyBalanceView,
+    CounterpartyCreateOrderView,
 )
 
 urlpatterns = [
     path('suppliers/', SupplierListCreateView.as_view(), name='supplier-list'),
     path('suppliers/<int:pk>/', SupplierDetailView.as_view(), name='supplier-detail'),
+
+    # Задача 9 — контрагенти
+    path('counterparties/', CounterpartyListCreateView.as_view(), name='counterparty-list'),
+    path('counterparties/<int:pk>/', CounterpartyDetailView.as_view(), name='counterparty-detail'),
+    path('counterparties/<int:pk>/orders/', CounterpartyOrdersView.as_view(), name='counterparty-orders'),
+    path('counterparties/<int:pk>/service-jobs/', CounterpartyServiceJobsView.as_view(), name='counterparty-service-jobs'),
+    path('counterparties/<int:pk>/balance/', CounterpartyBalanceView.as_view(), name='counterparty-balance'),
+    path('counterparties/<int:pk>/create-order/', CounterpartyCreateOrderView.as_view(), name='counterparty-create-order'),
 
     path('cash-registers/', CashRegisterListCreateView.as_view(), name='cashregister-list'),
     path('cash-registers/analytics/', GlobalCashboxAnalyticsView.as_view(), name='cashregister-analytics'),

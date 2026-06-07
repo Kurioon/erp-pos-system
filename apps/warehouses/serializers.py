@@ -14,16 +14,38 @@ class WarehouseSerializer(serializers.ModelSerializer):
 class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
     photo = serializers.ImageField(required=False, allow_null=True)
-    
+    # Задача 9: дані контрагента-покупця для переходу в профіль
+    counterparty_data = serializers.SerializerMethodField()
+    # Сценарій 2 (Backordering): остання закупівля запчастини під цей ремонт
+    backorder_purchase = serializers.SerializerMethodField()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from django.apps import apps
         Nomenclature = apps.get_model('products', 'Nomenclature')
+        Counterparty = apps.get_model('orders', 'Counterparty')
         self.fields['device'] = serializers.PrimaryKeyRelatedField(
             queryset=Nomenclature.objects.all(),
             required=False,
             allow_null=True
         )
+        self.fields['counterparty'] = serializers.PrimaryKeyRelatedField(
+            queryset=Counterparty.objects.all(),
+            required=False,
+            allow_null=True
+        )
+
+    def get_counterparty_data(self, obj):
+        cp = obj.counterparty
+        if not cp:
+            return None
+        return {'id': cp.id, 'name': cp.name, 'phone': cp.phone, 'role': cp.role}
+
+    def get_backorder_purchase(self, obj):
+        po = obj.backorder_purchases.order_by('-created_at').first()
+        if not po:
+            return None
+        return {'id': po.id, 'status': po.status}
 
     class Meta:
         model = ServiceJob
@@ -31,6 +53,9 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'id',
             'customer_name',
             'customer_phone',
+            'counterparty',
+            'counterparty_data',
+            'backorder_purchase',
             'device',
             'device_name',
             'description',
@@ -138,9 +163,23 @@ class ServiceJobSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"storage_cell": "При видачі девайсу (статус 'returned') комірка має бути порожньою."}
                 )
-            data['storage_cell'] = None 
-            
+            data['storage_cell'] = None
+
         return data
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        # B9-1: ремонт → контрагент виступає покупцем (supplier → both)
+        if instance.counterparty:
+            instance.counterparty.mark_role('buyer')
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        # B9-1: ремонт → контрагент виступає покупцем (supplier → both)
+        if instance.counterparty:
+            instance.counterparty.mark_role('buyer')
+        return instance
 
 
 class WarehouseStockSerializer(serializers.ModelSerializer):

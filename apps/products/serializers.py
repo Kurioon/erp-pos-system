@@ -56,6 +56,8 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             return None
 
     supplier_name = serializers.SerializerMethodField()
+    # Задача 9: контрагент-постачальник з останньої закупівлі (для переходу в профіль)
+    supplier_counterparty = serializers.SerializerMethodField()
 
     def get_supplier_name(self, obj):
         from orders.models import OrderItem
@@ -64,9 +66,30 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             order__order_type='purchase',
             order__supplier__isnull=False
         ).order_by('-order__created_at').first()
-        
+
         if last_item:
             return last_item.order.supplier.name
+
+        # Задача 9: фолбек на контрагента-постачальника
+        cp_item = OrderItem.objects.filter(
+            product=obj,
+            order__order_type='purchase',
+            order__counterparty__isnull=False
+        ).order_by('-order__created_at').first()
+        if cp_item:
+            return cp_item.order.counterparty.name
+        return None
+
+    def get_supplier_counterparty(self, obj):
+        from orders.models import OrderItem
+        cp_item = OrderItem.objects.filter(
+            product=obj,
+            order__order_type='purchase',
+            order__counterparty__isnull=False
+        ).order_by('-order__created_at').first()
+        if cp_item and cp_item.order.counterparty:
+            cp = cp_item.order.counterparty
+            return {'id': cp.id, 'name': cp.name, 'role': cp.role}
         return None
 
     def to_representation(self, instance):
@@ -139,6 +162,7 @@ class NomenclatureSerializer(serializers.ModelSerializer):
             'sale_price',
             'wholesale_price',
             'supplier_name',
+            'supplier_counterparty',
             'vat_rate',
             'is_archived',
             'created_at',

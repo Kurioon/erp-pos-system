@@ -1,7 +1,8 @@
 import csv
 import io
 from decimal import Decimal
-from django.db.models import Q
+from django.db.models import Q, Sum, Value, DecimalField
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -10,8 +11,8 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
-from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier, Counterparty
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer, CounterpartySerializer
 from .services import process_refund, process_prepay, process_cancellation, process_receive
 from config.pdf_utils import ensure_pdf_font
 
@@ -31,6 +32,214 @@ class SupplierDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
     permission_classes = [IsAuthenticated]
+
+
+# ======================================================================
+# Задача 9 — Єдина база контрагентів
+# ======================================================================
+
+DECIMAL_ZERO = Value(Decimal('0.00'), output_field=DecimalField(max_digits=14, decimal_places=2))
+
+
+def _sum(queryset, field):
+    """Безпечна сума по полю (None → 0.00)."""
+    return queryset.aggregate(
+        s=Coalesce(Sum(field), DECIMAL_ZERO)
+    )['s']
+
+
+class CounterpartyListCreateView(generics.ListCreateAPIView):
+    serializer_class = CounterpartySerializer
+    permission_classes = [IsAdminRole]
+
+    def get_queryset(self):
+        qs = Counterparty.objects.filter(is_archived=False)
+
+        # Фільтр по ролі: 'supplier'/'buyer' включають також 'both'
+        role = self.request.query_params.get('role')
+        if role in ('buyer', 'supplier'):
+            qs = qs.filter(Q(role=role) | Q(role='both'))
+        elif role == 'both':
+            qs = qs.filter(role='both')
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(phone__icontains=search))
+
+        return qs.order_by('name')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'create', instance)
+
+
+class CounterpartyDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CounterpartySerializer
+    permission_classes = [IsAdminRole]
+    queryset = Counterparty.objects.filter(is_archived=False)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        ActivityLog.log(self.request.user, 'update', instance)
+
+    def destroy(self, request, *args, **kwargs):
+        cp = self.get_object()
+        ActivityLog.log(request.user, 'delete', cp)
+        cp.is_archived = True
+        cp.save(update_fields=['is_archived'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CounterpartyOrdersView(generics.ListAPIView):
+    """Замовлення контрагента: для покупця — retail, для постачальника — purchase."""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAdminRole]
+
+    def get_queryset(self):
+        cp_id = self.kwargs.get('pk')
+        qs = Order.objects.filter(counterparty_id=cp_id, is_archived=False)
+
+        order_type = self.request.query_params.get('order_type')
+        if order_type:
+            qs = qs.filter(order_type=order_type)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        search = self.request.query_params.get('search')
+        if search:
+            query = (
+                Q(comment_ttn__icontains=search)
+                | Q(items__product__name__icontains=search)
+                | Q(items__product__code__icontains=search)
+            )
+            if search.isdigit():
+                query |= Q(id=int(search))
+            qs = qs.filter(query).distinct()
+
+        ordering = self.request.query_params.get('ordering', '-created_at')
+        allowed = {'created_at', '-created_at', 'id', '-id'}
+        if ordering not in allowed:
+            ordering = '-created_at'
+        return qs.order_by(ordering)
+
+
+class CounterpartyServiceJobsView(generics.ListAPIView):
+    """Ремонти контрагента (для покупця)."""
+    permission_classes = [IsAdminRole]
+
+    def get_serializer_class(self):
+        from warehouses.serializers import ServiceJobSerializer
+        return ServiceJobSerializer
+
+    def get_queryset(self):
+        from warehouses.models import ServiceJob
+        cp_id = self.kwargs.get('pk')
+        qs = ServiceJob.objects.filter(counterparty_id=cp_id, is_archived=False)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        # Фільтр оплати: payment_status точно, або paid=true|false (false = є борг)
+        payment_status = self.request.query_params.get('payment_status')
+        if payment_status:
+            qs = qs.filter(payment_status=payment_status)
+        paid = self.request.query_params.get('paid')
+        if paid == 'true':
+            qs = qs.filter(payment_status='paid')
+        elif paid == 'false':
+            qs = qs.filter(payment_status__in=['unpaid', 'partial'])
+
+        search = self.request.query_params.get('search')
+        if search:
+            query = (
+                Q(device_name__icontains=search)
+                | Q(customer_name__icontains=search)
+                | Q(description__icontains=search)
+            )
+            if search.isdigit():
+                query |= Q(id=int(search))
+            qs = qs.filter(query)
+
+        return qs.order_by('-created_at')
+
+
+class CounterpartyBalanceView(APIView):
+    """Баланс контрагента: borg покупця (замовлення+ремонти) та обсяг закупівель."""
+    permission_classes = [IsAdminRole]
+
+    def get(self, request, pk):
+        try:
+            cp = Counterparty.objects.get(pk=pk, is_archived=False)
+        except Counterparty.DoesNotExist:
+            return Response({'error': 'Контрагента не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from warehouses.models import ServiceJob
+
+        # --- Покупець: роздрібні замовлення ---
+        retail = Order.objects.filter(counterparty=cp, order_type='retail', is_archived=False)
+        retail_paid = _sum(retail.filter(status__in=['partial', 'paid', 'returned']), 'prepay_amount')
+        retail_due = _sum(retail.filter(status='partial'), 'balance_due')
+        orders_partial = retail.filter(status='partial').count()
+
+        # --- Покупець: ремонти ---
+        repairs = ServiceJob.objects.filter(counterparty=cp, is_archived=False)
+        repairs_paid = _sum(repairs, 'paid_amount')
+        repairs_due = _sum(repairs.filter(payment_status__in=['unpaid', 'partial']), 'balance_due')
+        repairs_unpaid = repairs.filter(payment_status__in=['unpaid', 'partial']).count()
+
+        # --- Постачальник: закупівлі ---
+        purchases = Order.objects.filter(counterparty=cp, order_type='purchase', is_archived=False)
+        purchases_total = _sum(purchases, 'total_amount')
+        purchases_count = purchases.count()
+
+        return Response({
+            'buyer': {
+                'total_paid': str((retail_paid + repairs_paid).quantize(Decimal('0.01'))),
+                'total_balance_due': str((retail_due + repairs_due).quantize(Decimal('0.01'))),
+                'orders_partial': orders_partial,
+                'repairs_unpaid': repairs_unpaid,
+            },
+            'supplier': {
+                'total_purchases': str(purchases_total.quantize(Decimal('0.01'))),
+                'purchases_count': purchases_count,
+            },
+        })
+
+
+class CounterpartyCreateOrderView(APIView):
+    """Створення закупівлі з зафіксованим постачальником (Задача 9).
+
+    counterparty жорстко проставляється з URL — змінити постачальника не можна.
+    """
+    permission_classes = [IsAdminRole]
+
+    def post(self, request, pk):
+        try:
+            cp = Counterparty.objects.get(pk=pk, is_archived=False)
+        except Counterparty.DoesNotExist:
+            return Response({'error': 'Контрагента не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if cp.role not in ('supplier', 'both'):
+            return Response(
+                {'error': 'Контрагент не є постачальником.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        data = dict(request.data)
+        # Жорстко фіксуємо тип і постачальника, ігноруємо спроби підмінити
+        data['order_type'] = 'purchase'
+        data['counterparty'] = cp.id
+        data.pop('supplier', None)
+        data.pop('supplier_name_input', None)
+
+        serializer = OrderSerializer(data=data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save(user=request.user)
+        ActivityLog.log(request.user, 'create', order)
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
 
 class CashRegisterListCreateView(generics.ListCreateAPIView):
@@ -105,6 +314,14 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user_filter = self.request.query_params.get('user')
         if user_filter:
             queryset = queryset.filter(user_id=user_filter)
+
+        # Сценарій 2 (Backordering): закупівлі під конкретне джерело
+        related_ro = self.request.query_params.get('related_retail_order')
+        if related_ro:
+            queryset = queryset.filter(related_retail_order_id=related_ro)
+        related_sj = self.request.query_params.get('related_service_job')
+        if related_sj:
+            queryset = queryset.filter(related_service_job_id=related_sj)
 
         # Уніфікований ?search=<id|comment_ttn> — відповідає контракту API
         search = self.request.query_params.get('search')
@@ -225,6 +442,10 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         date_filter = self.request.query_params.get('date')
         if date_filter:
             queryset = queryset.filter(timestamp__date=date_filter)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
 
         return queryset
 
@@ -448,6 +669,16 @@ class OrderPrepayView(APIView):
             cash_register = CashRegister.objects.get(pk=cash_register_id)
         except CashRegister.DoesNotExist:
             return Response({'error': 'Касу не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Задача 9: можна передати покупця прямо при оплаті (для часткової — обов'язково)
+        counterparty_id = request.data.get('counterparty')
+        if counterparty_id:
+            try:
+                cp = Counterparty.objects.get(pk=counterparty_id, is_archived=False)
+            except Counterparty.DoesNotExist:
+                return Response({'error': 'Контрагента не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
+            order.counterparty = cp
+            order.save(update_fields=['counterparty'])
 
         try:
             t = process_prepay(order, amount, currency, cash_register, request.user)

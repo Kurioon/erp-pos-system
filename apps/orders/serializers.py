@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier
+from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier, Counterparty
 
 
 class CashRegisterSerializer(serializers.ModelSerializer):
@@ -32,6 +32,31 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CounterpartySerializer(serializers.ModelSerializer):
+    """Повний серіалізатор контрагента (Задача 9)."""
+    class Meta:
+        model = Counterparty
+        fields = ['id', 'name', 'phone', 'email', 'role', 'notes', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Ім'я обов'язкове.")
+        return value.strip()
+
+    def validate_phone(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Телефон обов\'язковий.')
+        return value.strip()
+
+
+class CounterpartyShortSerializer(serializers.ModelSerializer):
+    """Стислий серіалізатор для вбудовування в Order/ServiceJob."""
+    class Meta:
+        model = Counterparty
+        fields = ['id', 'name', 'phone', 'role']
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
 
@@ -47,6 +72,13 @@ class OrderSerializer(serializers.ModelSerializer):
     supplier_name_input = serializers.CharField(write_only=True, required=False, allow_null=True)
     can_refund = serializers.SerializerMethodField()
     can_view_receipt = serializers.SerializerMethodField()
+    # Задача 9: дані контрагента (покупця/постачальника) для переходу в профіль
+    counterparty_data = CounterpartyShortSerializer(source='counterparty', read_only=True)
+    # Сценарій 2 (Backordering): дані прив'язаного джерела закупівлі
+    related_retail_order_data = serializers.SerializerMethodField()
+    related_service_job_data = serializers.SerializerMethodField()
+    # Зворотній зв'язок: остання backorder-закупівля під це джерело
+    backorder_purchase = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -60,9 +92,48 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_can_view_receipt(self, obj):
         return obj.status in ('partial', 'paid', 'returned')
 
+    def get_related_retail_order_data(self, obj):
+        ro = obj.related_retail_order
+        if not ro:
+            return None
+        cp = ro.counterparty
+        return {
+            'id': ro.id,
+            'status': ro.status,
+            'counterparty_data': (
+                {'id': cp.id, 'name': cp.name, 'phone': cp.phone} if cp else None
+            ),
+        }
+
+    def get_related_service_job_data(self, obj):
+        sj = obj.related_service_job
+        if not sj:
+            return None
+        return {
+            'id': sj.id,
+            'customer_name': sj.customer_name,
+            'customer_phone': sj.customer_phone,
+            'device_name': sj.device_name,
+            'status': sj.status,
+        }
+
+    def get_backorder_purchase(self, obj):
+        # Лише для retail-замовлень: остання закупівля, зроблена під нього
+        if obj.order_type != 'retail':
+            return None
+        po = obj.backorder_purchases.order_by('-created_at').first()
+        if not po:
+            return None
+        return {'id': po.id, 'status': po.status}
+
     def get_supplier_name(self, obj):
         # Назва постачальника для фронту (щоб не показував «Невідомий» при наявному supplier)
-        return obj.supplier.name if obj.supplier else None
+        if obj.supplier:
+            return obj.supplier.name
+        # Задача 9: для закупівлі підхоплюємо назву з контрагента
+        if obj.order_type == 'purchase' and obj.counterparty:
+            return obj.counterparty.name
+        return None
 
     def validate_total_amount(self, value):
         instance = self.instance
@@ -100,6 +171,18 @@ class OrderSerializer(serializers.ModelSerializer):
                 {'supplier': 'Роздрібне замовлення (retail) не може мати постачальника.'}
             )
 
+        # Сценарій 2: зв'язок backorder лише для закупівель, і одне з двох джерел
+        related_ro = data.get('related_retail_order', instance.related_retail_order if instance else None)
+        related_sj = data.get('related_service_job', instance.related_service_job if instance else None)
+        if (related_ro or related_sj) and order_type != 'purchase':
+            raise serializers.ValidationError(
+                {'related_retail_order': 'Прив\'язка до джерела можлива лише для закупівлі (purchase).'}
+            )
+        if related_ro and related_sj:
+            raise serializers.ValidationError(
+                {'related_service_job': 'Закупівля може бути прив\'язана лише до одного джерела (замовлення АБО ремонт).'}
+            )
+
         if prepay > total:
             raise serializers.ValidationError(
                 {'prepay_amount': 'Передоплата не може бути більшою за загальну суму.'}
@@ -125,9 +208,13 @@ class OrderSerializer(serializers.ModelSerializer):
         
         # 2. Створюємо саме замовлення
         order = super().create(validated_data)
-        
+
+        # B9-1: закупівля → контрагент виступає постачальником (buyer → both)
+        if order.order_type == 'purchase' and order.counterparty:
+            order.counterparty.mark_role('supplier')
+
         # 3. Імпортуємо модель Nomenclature локально для отримання ціни
-        from products.models import Nomenclature 
+        from products.models import Nomenclature
         
         # 4. Створюємо позиції замовлення (OrderItem)
         for item in items_data:
@@ -180,10 +267,20 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    counterparty = CounterpartyShortSerializer(read_only=True)
+    source_document = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = '__all__'
         read_only_fields = ['user']
+
+    def get_source_document(self, obj):
+        if obj.order:
+            return {'id': obj.order.id, 'type': obj.order.order_type, 'total_amount': obj.order.total_amount}
+        if obj.service_job:
+            return {'id': obj.service_job.id, 'type': 'repair', 'total_amount': obj.service_job.price}
+        return None
 
     def validate_amount(self, value):
         if value <= 0:

@@ -566,7 +566,7 @@ class OrderReceiptPDFView(APIView):
         # BUG-07 — перевірка власника
         # Чек доступний для замовлень, де вже була оплата (partial або paid).
         user = request.user
-        paid_statuses = ['partial', 'paid']
+        paid_statuses = ['partial', 'paid', 'returned']
         try:
             if hasattr(user, 'role') and user.role == 'admin':
                 order = Order.objects.get(pk=pk, status__in=paid_statuses)

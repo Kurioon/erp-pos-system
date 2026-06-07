@@ -315,6 +315,14 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if user_filter:
             queryset = queryset.filter(user_id=user_filter)
 
+        # Сценарій 2 (Backordering): закупівлі під конкретне джерело
+        related_ro = self.request.query_params.get('related_retail_order')
+        if related_ro:
+            queryset = queryset.filter(related_retail_order_id=related_ro)
+        related_sj = self.request.query_params.get('related_service_job')
+        if related_sj:
+            queryset = queryset.filter(related_service_job_id=related_sj)
+
         # Уніфікований ?search=<id|comment_ttn> — відповідає контракту API
         search = self.request.query_params.get('search')
         if search:

@@ -29,6 +29,30 @@ class Supplier(models.Model):
         return self.name
 
 
+class Counterparty(models.Model):
+    """Єдиний довідник контрагентів (Задача 9).
+
+    Одна людина/компанія може бути водночас покупцем і постачальником (role='both').
+    Покупець прив'язується до роздрібного замовлення при частковій оплаті та до ремонту;
+    постачальник — до закупівлі.
+    """
+    ROLE_CHOICES = [
+        ('buyer', 'Покупець'),
+        ('supplier', 'Постачальник'),
+        ('both', 'Обидва'),
+    ]
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='buyer')
+    notes = models.TextField(blank=True)
+    is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -48,6 +72,15 @@ class Order(models.Model):
 
     supplier = models.ForeignKey(
         Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders'
+    )
+    # Задача 9: єдиний контрагент. Для retail (часткова оплата) — покупець,
+    # для purchase — постачальник. supplier лишаємо для зворотної сумісності.
+    counterparty = models.ForeignKey(
+        'Counterparty',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

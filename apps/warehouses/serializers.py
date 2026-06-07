@@ -14,16 +14,30 @@ class WarehouseSerializer(serializers.ModelSerializer):
 class ServiceJobSerializer(serializers.ModelSerializer):
     """Serializer for ServiceJob model including comment and photo fields."""
     photo = serializers.ImageField(required=False, allow_null=True)
-    
+    # Задача 9: дані контрагента-покупця для переходу в профіль
+    counterparty_data = serializers.SerializerMethodField()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from django.apps import apps
         Nomenclature = apps.get_model('products', 'Nomenclature')
+        Counterparty = apps.get_model('orders', 'Counterparty')
         self.fields['device'] = serializers.PrimaryKeyRelatedField(
             queryset=Nomenclature.objects.all(),
             required=False,
             allow_null=True
         )
+        self.fields['counterparty'] = serializers.PrimaryKeyRelatedField(
+            queryset=Counterparty.objects.all(),
+            required=False,
+            allow_null=True
+        )
+
+    def get_counterparty_data(self, obj):
+        cp = obj.counterparty
+        if not cp:
+            return None
+        return {'id': cp.id, 'name': cp.name, 'phone': cp.phone, 'role': cp.role}
 
     class Meta:
         model = ServiceJob
@@ -31,6 +45,8 @@ class ServiceJobSerializer(serializers.ModelSerializer):
             'id',
             'customer_name',
             'customer_phone',
+            'counterparty',
+            'counterparty_data',
             'device',
             'device_name',
             'description',

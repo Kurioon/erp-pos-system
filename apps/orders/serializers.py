@@ -312,6 +312,24 @@ class TransactionSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class TransactionDetailSerializer(TransactionSerializer):
+    """Деталь транзакції: для джерела-замовлення додає склад (позиції)."""
+
+    def get_source_document(self, obj):
+        data = super().get_source_document(obj)
+        # Позиції додаємо лише для замовлень (retail/purchase); ремонт — без позицій
+        if data and obj.order_id:
+            data['items'] = [
+                {
+                    'product_name': item.product.name if item.product else None,
+                    'quantity': item.quantity,
+                    'price': str(item.price),
+                }
+                for item in obj.order.items.select_related('product').all()
+            ]
+        return data
+
+
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate

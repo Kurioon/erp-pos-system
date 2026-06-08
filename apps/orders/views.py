@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import datetime
 from decimal import Decimal
 from django.db.models import Q, Sum, Value, DecimalField
 from django.db.models.functions import Coalesce
@@ -12,7 +13,7 @@ from drf_spectacular.utils import extend_schema
 from users.permissions import IsAdminRole
 from activity_log.models import ActivityLog
 from .models import CashRegister, Order, Transaction, OrderItem, ExchangeRate, Supplier, Counterparty
-from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer, CounterpartySerializer
+from .serializers import CashRegisterSerializer, OrderSerializer, TransactionSerializer, TransactionDetailSerializer, OrderItemSerializer, ExchangeRateSerializer, SupplierSerializer, CounterpartySerializer
 from .services import process_refund, process_prepay, process_cancellation, process_receive
 from config.pdf_utils import ensure_pdf_font
 
@@ -20,6 +21,16 @@ from config.pdf_utils import ensure_pdf_font
 # Типи транзакцій які продавець НЕ може створювати вручну
 ADMIN_ONLY_TRANSACTION_TYPES = ('income', 'expense')
 SYSTEM_ONLY_TRANSACTION_TYPES = ('prepay', 'payment', 'refund', 'sale', 'return')
+
+
+def _parse_search_date(value):
+    """Парсить дату з пошукового рядка: YYYY-MM-DD або DD.MM.YYYY. Інакше None."""
+    for fmt in ('%Y-%m-%d', '%d.%m.%Y'):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 class SupplierListCreateView(generics.ListCreateAPIView):
@@ -447,6 +458,25 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
+        # Уніфікований пошук: ID джерела / замовник (ім'я або телефон) / дата
+        search = self.request.query_params.get('search')
+        if search:
+            search = search.strip()
+            query = Q(counterparty__name__icontains=search) | Q(counterparty__phone__icontains=search)
+            if search.isdigit():
+                query |= Q(order_id=int(search)) | Q(service_job_id=int(search))
+            parsed_date = _parse_search_date(search)
+            if parsed_date:
+                query |= Q(timestamp__date=parsed_date)
+            queryset = queryset.filter(query)
+
+        # Фільтр за типом документа-джерела: замовлення чи ремонт
+        source_type = self.request.query_params.get('source_type')
+        if source_type == 'order':
+            queryset = queryset.filter(order__isnull=False)
+        elif source_type == 'repair':
+            queryset = queryset.filter(service_job__isnull=False)
+
         return queryset
 
     # BUG-03 — обмеження на створення транзакцій
@@ -470,7 +500,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
 
 class TransactionDetailView(generics.RetrieveAPIView):
     queryset = Transaction.objects.all()
-    serializer_class = TransactionSerializer
+    serializer_class = TransactionDetailSerializer
     permission_classes = [IsAuthenticated]
 
 
